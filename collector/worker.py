@@ -7,7 +7,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from collector.queue import DEADLETTER_KEY, PENDING_KEY, deadletter_spans, dequeue_batch
+from collector.redis_queue import DEADLETTER_KEY, PENDING_KEY, deadletter_spans, dequeue_batch
 from db.connection import close_pool, get_pool
 
 load_dotenv()

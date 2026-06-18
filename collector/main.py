@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, status
 
 from collector.models import SpanIn
-from collector.queue import enqueue_span
+from collector.redis_queue import enqueue_span
 
 load_dotenv()
 
