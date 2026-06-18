@@ -27,7 +27,13 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col" style={{ background: "var(--background)", color: "var(--text-primary)" }}>
+        <nav style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }} className="px-6 py-3 flex items-center gap-3">
+          <span className="font-bold text-sm tracking-wide" style={{ color: "var(--accent)" }}>⬡ Tracer</span>
+          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>LLM Observability</span>
+        </nav>
+        <main className="flex-1">{children}</main>
+      </body>
     </html>
   );
 }

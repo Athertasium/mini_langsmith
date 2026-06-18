@@ -3,66 +3,97 @@
 import { useState } from "react";
 import type { Run } from "@/lib/db";
 
-const RUN_TYPE_COLORS: Record<string, string> = {
-  llm: "bg-blue-100 text-blue-700",
-  chain: "bg-purple-100 text-purple-700",
-  tool: "bg-yellow-100 text-yellow-700",
-  retriever: "bg-green-100 text-green-700",
+const RUN_TYPE_STYLES: Record<string, { bg: string; color: string }> = {
+  llm:       { bg: "#1e2a4a", color: "#818cf8" },
+  chain:     { bg: "#2a1e4a", color: "#c084fc" },
+  tool:      { bg: "#2a2a1e", color: "#facc15" },
+  retriever: { bg: "#1e2a2a", color: "#34d399" },
 };
 
 function SpanNode({ span, depth }: { span: RunNode; depth: number }) {
   const [expanded, setExpanded] = useState(false);
   const hasChildren = span.children.length > 0;
   const hasError = span.error != null;
-  const badgeClass =
-    RUN_TYPE_COLORS[span.run_type] ?? "bg-gray-100 text-gray-700";
+  const typeStyle = RUN_TYPE_STYLES[span.run_type] ?? { bg: "#1e2030", color: "#8b8fa8" };
+
+  const borderColor = hasError ? "#dc2626" : "var(--border)";
+  const bgColor = hasError ? "#1f0a0a" : "var(--surface)";
 
   return (
     <div
-      className={`rounded-lg border ${hasError ? "border-red-400 bg-red-50" : "border-gray-200 bg-white"} mb-2`}
-      style={{ marginLeft: depth * 20 }}
+      className="rounded-lg mb-2"
+      style={{
+        marginLeft: depth * 20,
+        border: `1px solid ${borderColor}`,
+        background: bgColor,
+      }}
     >
       <div
         className="flex cursor-pointer items-center gap-3 px-4 py-3"
         onClick={() => setExpanded((v) => !v)}
       >
-        <span className={`rounded px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
+        <span
+          className="rounded px-2 py-0.5 text-xs font-medium shrink-0"
+          style={{ background: typeStyle.bg, color: typeStyle.color }}
+        >
           {span.run_type}
         </span>
-        <span className="flex-1 font-medium text-gray-900">{span.name}</span>
+        <span className="flex-1 font-medium text-sm" style={{ color: "var(--text-primary)" }}>
+          {span.name}
+        </span>
         {span.latency_ms != null && (
-          <span className="text-sm text-black">{span.latency_ms} ms</span>
+          <span
+            className="text-xs shrink-0"
+            style={{ color: "#818cf8", fontFamily: "var(--font-geist-mono)" }}
+          >
+            {span.latency_ms} ms
+          </span>
         )}
         {hasError && (
-          <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-bold text-white">
+          <span className="rounded px-2 py-0.5 text-xs font-bold shrink-0" style={{ background: "#3f1515", color: "#f87171" }}>
             ERROR
           </span>
         )}
         {(hasChildren || span.inputs || span.outputs) && (
-          <span className="text-black">{expanded ? "▲" : "▼"}</span>
+          <span className="text-xs shrink-0" style={{ color: "var(--text-secondary)" }}>
+            {expanded ? "▲" : "▼"}
+          </span>
         )}
       </div>
 
       {hasError && (
-        <div className="border-t border-red-300 bg-red-100 px-4 py-2 text-sm text-red-800">
+        <div
+          className="px-4 py-2 text-sm"
+          style={{ borderTop: "1px solid #7f1d1d", background: "#2a0a0a", color: "#fca5a5" }}
+        >
           <strong>Error:</strong> {span.error}
         </div>
       )}
 
-      {expanded && (
-        <div className="border-t border-gray-100 px-4 py-3 text-sm">
+      {expanded && (span.inputs || span.outputs) && (
+        <div className="px-4 py-3 text-sm" style={{ borderTop: "1px solid var(--border)" }}>
           {span.inputs && (
             <div className="mb-3">
-              <p className="mb-1 font-medium text-gray-600">Inputs</p>
-              <pre className="overflow-x-auto rounded bg-gray-50 p-2 text-xs">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
+                Inputs
+              </p>
+              <pre
+                className="overflow-x-auto rounded p-3 text-xs"
+                style={{ background: "var(--background)", color: "#a5b4fc", fontFamily: "var(--font-geist-mono)" }}
+              >
                 {JSON.stringify(span.inputs, null, 2)}
               </pre>
             </div>
           )}
           {span.outputs && (
             <div>
-              <p className="mb-1 font-medium text-gray-600">Outputs</p>
-              <pre className="overflow-x-auto rounded bg-gray-50 p-2 text-xs">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
+                Outputs
+              </p>
+              <pre
+                className="overflow-x-auto rounded p-3 text-xs"
+                style={{ background: "var(--background)", color: "#86efac", fontFamily: "var(--font-geist-mono)" }}
+              >
                 {JSON.stringify(span.outputs, null, 2)}
               </pre>
             </div>
@@ -70,10 +101,13 @@ function SpanNode({ span, depth }: { span: RunNode; depth: number }) {
         </div>
       )}
 
-      {expanded &&
-        span.children.map((child) => (
-          <SpanNode key={child.id} span={child} depth={0} />
-        ))}
+      {expanded && hasChildren && (
+        <div className="pb-2 pr-2" style={{ borderTop: "1px solid var(--border)" }}>
+          {span.children.map((child) => (
+            <SpanNode key={child.id} span={child} depth={0} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

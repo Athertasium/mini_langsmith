@@ -18,11 +18,18 @@ export default async function TracesPage({
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Traces</h1>
+        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+          Traces
+        </h1>
         <div className="flex gap-2">
           <Link
             href="/traces"
-            className={`rounded px-3 py-1.5 text-sm font-medium ${!project ? "bg-indigo-600 text-black" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+            className="rounded px-3 py-1.5 text-sm font-medium transition-colors"
+            style={
+              !project
+                ? { background: "var(--accent)", color: "#fff" }
+                : { background: "var(--surface-2)", color: "var(--text-secondary)" }
+            }
           >
             All
           </Link>
@@ -30,7 +37,12 @@ export default async function TracesPage({
             <Link
               key={p}
               href={`/traces?project=${p}`}
-              className={`rounded px-3 py-1.5 text-sm font-medium ${project === p ? "bg-indigo-600 text-black" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+              className="rounded px-3 py-1.5 text-sm font-medium transition-colors"
+              style={
+                project === p
+                  ? { background: "var(--accent)", color: "#fff" }
+                  : { background: "var(--surface-2)", color: "var(--text-secondary)" }
+              }
             >
               {p}
             </Link>

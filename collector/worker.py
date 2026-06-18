@@ -63,7 +63,14 @@ async def _insert_batch(spans: list[dict[str, Any]]) -> None:
         group = "(" + ", ".join(f"${i * len(INSERT_COLS) + j + 1}" for j in range(len(INSERT_COLS))) + ")"
         value_groups.append(group)
 
-    sql = f"INSERT INTO runs ({col_list}) VALUES {', '.join(value_groups)} ON CONFLICT (id) DO NOTHING"
+    update_cols = ("outputs", "error", "end_time", "extra")
+    update_clause = ", ".join(
+        f"{c} = COALESCE(EXCLUDED.{c}, runs.{c})" for c in update_cols
+    )
+    sql = (
+        f"INSERT INTO runs ({col_list}) VALUES {', '.join(value_groups)} "
+        f"ON CONFLICT (id) DO UPDATE SET {update_clause}"
+    )
 
     async with pool.acquire() as conn:
         await conn.execute(sql, *args)
