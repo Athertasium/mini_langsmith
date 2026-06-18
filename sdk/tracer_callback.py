@@ -7,7 +7,6 @@ Usage:
     chain.invoke(input, config={"callbacks": [tracer]})
 """
 
-import asyncio
 import logging
 import threading
 from datetime import datetime, timezone
@@ -30,12 +29,20 @@ def _iso(dt: datetime) -> str:
 
 
 class CustomTracer(BaseCallbackHandler):
-    def __init__(self, endpoint: str, project: str, api_key: str) -> None:
+    def __init__(
+        self,
+        endpoint: str,
+        project: str,
+        api_key: str,
+        router_decision_key: str = "routerDecision",
+    ) -> None:
         super().__init__()
         self._endpoint = endpoint.rstrip("/")
         self._project = project
         self._api_key = api_key
+        self._router_decision_key = router_decision_key
         self._start_times: dict[str, datetime] = {}
+        self._sessions: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -51,6 +58,18 @@ class CustomTracer(BaseCallbackHandler):
 
     def _pop_start(self, run_id: UUID) -> datetime | None:
         return self._start_times.pop(self._key(run_id), None)
+
+    def _get_session(self, run_id: UUID, parent_run_id: UUID | None) -> str:
+        key = self._key(run_id)
+        if parent_run_id is None:
+            session = str(run_id)
+        else:
+            session = self._sessions.get(self._key(parent_run_id), str(run_id))
+        self._sessions[key] = session
+        return session
+
+    def _lookup_session(self, run_id: UUID) -> str | None:
+        return self._sessions.get(self._key(run_id))
 
     def _fire(self, payload: dict[str, Any]) -> None:
         """Fire-and-forget POST — never blocks calling thread."""
@@ -90,7 +109,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._get_session(run_id, parent_run_id),
             "name": serialized.get("id", ["unknown"])[-1],
             "run_type": "llm",
             "inputs": {"prompts": prompts},
@@ -112,7 +131,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._lookup_session(run_id),
             "name": "llm",
             "run_type": "llm",
             "inputs": None,
@@ -139,7 +158,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._lookup_session(run_id),
             "name": "llm",
             "run_type": "llm",
             "error": str(error),
@@ -165,7 +184,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._get_session(run_id, parent_run_id),
             "name": serialized.get("id", ["chain"])[-1],
             "run_type": "chain",
             "inputs": inputs,
@@ -182,16 +201,24 @@ class CustomTracer(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         start = self._pop_start(run_id)
-        self._fire({
+        branch_decision: str | None = None
+        if isinstance(outputs, dict):
+            val = outputs.get(self._router_decision_key)
+            if val is not None:
+                branch_decision = str(val)
+        payload: dict[str, Any] = {
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._lookup_session(run_id),
             "name": "chain",
             "run_type": "chain",
             "outputs": outputs,
             "start_time": _iso(start) if start else _iso(_now()),
             "end_time": _iso(_now()),
-        })
+        }
+        if branch_decision is not None:
+            payload["branch_decision"] = branch_decision
+        self._fire(payload)
 
     def on_chain_error(
         self,
@@ -205,7 +232,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._lookup_session(run_id),
             "name": "chain",
             "run_type": "chain",
             "error": str(error),
@@ -231,7 +258,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._get_session(run_id, parent_run_id),
             "name": serialized.get("name", "tool"),
             "run_type": "tool",
             "inputs": {"input": input_str},
@@ -251,7 +278,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._lookup_session(run_id),
             "name": "tool",
             "run_type": "tool",
             "outputs": {"output": str(output)},
@@ -271,7 +298,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._lookup_session(run_id),
             "name": "tool",
             "run_type": "tool",
             "error": str(error),
@@ -297,7 +324,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._get_session(run_id, parent_run_id),
             "name": serialized.get("id", ["retriever"])[-1],
             "run_type": "retriever",
             "inputs": {"query": query},
@@ -317,7 +344,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._lookup_session(run_id),
             "name": "retriever",
             "run_type": "retriever",
             "outputs": {"documents": [str(d) for d in documents]},
@@ -337,7 +364,7 @@ class CustomTracer(BaseCallbackHandler):
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
-            "session_id": None,
+            "session_id": self._lookup_session(run_id),
             "name": "retriever",
             "run_type": "retriever",
             "error": str(error),

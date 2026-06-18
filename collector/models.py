@@ -19,3 +19,4 @@ class SpanIn(BaseModel):
     end_time: datetime | None = None
     tags: list[str] = Field(default_factory=list)
     extra: dict[str, Any] | None = None
+    branch_decision: str | None = None

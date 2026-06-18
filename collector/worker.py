@@ -31,6 +31,7 @@ INSERT_COLS = (
     "end_time",
     "tags",
     "extra",
+    "branch_decision",
 )
 
 
@@ -49,10 +50,19 @@ def _row(span: dict[str, Any]) -> tuple[Any, ...]:
         datetime.fromisoformat(span["end_time"]) if span.get("end_time") else None,
         span.get("tags") or [],
         json.dumps(span["extra"]) if span.get("extra") is not None else None,
+        span.get("branch_decision"),
     )
 
 
 async def _insert_batch(spans: list[dict[str, Any]]) -> None:
+    # _start and _end for the same run_id can land in the same batch.
+    # Postgres rejects double-upsert on the same conflict key within one statement.
+    # Deduplicate by id, keeping the last occurrence (_end has outputs/end_time).
+    deduped: dict[str, dict[str, Any]] = {}
+    for span in spans:
+        deduped[span["id"]] = span
+    spans = list(deduped.values())
+
     pool = await get_pool()
     col_list = ", ".join(INSERT_COLS)
     args: list[Any] = []
@@ -63,7 +73,7 @@ async def _insert_batch(spans: list[dict[str, Any]]) -> None:
         group = "(" + ", ".join(f"${i * len(INSERT_COLS) + j + 1}" for j in range(len(INSERT_COLS))) + ")"
         value_groups.append(group)
 
-    update_cols = ("outputs", "error", "end_time", "extra")
+    update_cols = ("outputs", "error", "end_time", "extra", "branch_decision")
     update_clause = ", ".join(
         f"{c} = COALESCE(EXCLUDED.{c}, runs.{c})" for c in update_cols
     )

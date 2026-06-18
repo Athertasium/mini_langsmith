@@ -29,6 +29,13 @@ export interface Run {
   latency_ms: number | null;
   tags: string[];
   extra: Record<string, unknown> | null;
+  branch_decision: string | null;
+}
+
+export interface PathRow {
+  path: string;
+  frequency: number;
+  session_ids: string[];
 }
 
 export async function getRootSpans(project?: string): Promise<Run[]> {
@@ -56,6 +63,46 @@ export async function getTraceTree(rootId: string): Promise<Run[]> {
      )
      SELECT * FROM trace ORDER BY start_time`,
     [rootId]
+  );
+  return rows;
+}
+
+export async function getPathFrequency(
+  project: string,
+  from?: string,
+  to?: string,
+): Promise<PathRow[]> {
+  const pool = getPool();
+  const { rows } = await pool.query<PathRow>(
+    `WITH ordered_spans AS (
+       SELECT
+         session_id,
+         name,
+         branch_decision,
+         start_time,
+         ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY start_time) AS step_order
+       FROM runs
+       WHERE project = $1
+         AND run_type = 'chain'
+         AND session_id IS NOT NULL
+         AND ($2::timestamptz IS NULL OR start_time >= $2::timestamptz)
+         AND ($3::timestamptz IS NULL OR start_time < $3::timestamptz)
+     ),
+     paths AS (
+       SELECT
+         session_id,
+         STRING_AGG(
+           name || COALESCE(':' || branch_decision, ''),
+           ' → ' ORDER BY step_order
+         ) AS path
+       FROM ordered_spans
+       GROUP BY session_id
+     )
+     SELECT path, COUNT(*)::int AS frequency, ARRAY_AGG(session_id::text) AS session_ids
+     FROM paths
+     GROUP BY path
+     ORDER BY frequency DESC`,
+    [project, from ?? null, to ?? null],
   );
   return rows;
 }
