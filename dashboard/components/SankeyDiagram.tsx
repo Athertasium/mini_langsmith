@@ -73,7 +73,7 @@ export function SankeyDiagram({ project, from, to }: Props) {
   if (nodes.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center" style={{ color: "var(--text-secondary)" }}>
-        Paths found but too short to visualise (need ≥ 2 steps per trace).
+        Each session only has 1 span — nothing to flow between. Add named nodes (e.g. <code>RunnableLambda.with_config(run_name=&quot;step&quot;)</code>) to produce multi-step paths.
       </div>
     );
   }
@@ -87,13 +87,23 @@ export function SankeyDiagram({ project, from, to }: Props) {
     target: number | D3Node;
   };
 
-  const graph = sankey<SankeyNode, RichLink>()
-    .nodeWidth(NODE_WIDTH)
-    .nodePadding(NODE_PADDING)
-    .extent([[1, 1], [WIDTH - 1, HEIGHT - 5]])({
-      nodes: nodes.map((n) => ({ ...n })),
-      links: (links as RichLink[]).map((l) => ({ ...l })),
-    }) as SankeyGraph<D3Node, D3Link>;
+  let graph: SankeyGraph<D3Node, D3Link>;
+  try {
+    graph = sankey<SankeyNode, RichLink>()
+      .nodeWidth(NODE_WIDTH)
+      .nodePadding(NODE_PADDING)
+      .extent([[1, 1], [WIDTH - 1, HEIGHT - 5]])({
+        nodes: nodes.map((n) => ({ ...n })),
+        links: (links as RichLink[]).map((l) => ({ ...l })),
+      }) as SankeyGraph<D3Node, D3Link>;
+  } catch (e) {
+    return (
+      <div className="flex h-64 items-center justify-center" style={{ color: "var(--text-secondary)" }}>
+        Could not render Sankey — paths contain cycles or duplicate node names.
+        {" "}<span style={{ fontSize: 11 }}>{String(e)}</span>
+      </div>
+    );
+  }
 
   const accent = "#6366f1";
   const accentHover = "#818cf8";
@@ -135,10 +145,10 @@ export function SankeyDiagram({ project, from, to }: Props) {
 
         {/* Nodes */}
         {graph.nodes.map((node, i) => {
-          const x0 = node.x0 ?? 0;
-          const x1 = node.x1 ?? 0;
-          const y0 = node.y0 ?? 0;
-          const y1 = node.y1 ?? 0;
+          const x0 = isFinite(node.x0 ?? NaN) ? (node.x0 ?? 0) : 0;
+          const x1 = isFinite(node.x1 ?? NaN) ? (node.x1 ?? 0) : 0;
+          const y0 = isFinite(node.y0 ?? NaN) ? (node.y0 ?? 0) : 0;
+          const y1 = isFinite(node.y1 ?? NaN) ? (node.y1 ?? 0) : 0;
           const labelRight = x0 < WIDTH / 2;
           const labelX = labelRight ? x1 + 6 : x0 - 6;
           const labelAnchor = labelRight ? "start" : "end";

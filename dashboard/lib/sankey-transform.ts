@@ -28,18 +28,21 @@ export interface SankeyData {
  * Nodes are keyed by their label so "router:cold_start" and "router:proceed" are distinct.
  */
 export function toSankeyData(rows: PathRow[]): SankeyData {
+  // Keyed by "label||stepN" so the same node name at different positions is a
+  // distinct Sankey node — prevents back-edges (cycles) from looping graphs.
   const nodeIndex = new Map<string, number>();
   const nodes: SankeyNode[] = [];
 
   const linkKey = (s: number, t: number) => `${s}__${t}`;
   const linkMap = new Map<string, { source: number; target: number; value: number; sessionIds: string[] }>();
 
-  function getNode(label: string): number {
-    const existing = nodeIndex.get(label);
+  function getNode(label: string, step: number): number {
+    const key = `${label}||pos${step}`;
+    const existing = nodeIndex.get(key);
     if (existing !== undefined) return existing;
     const idx = nodes.length;
     nodes.push({ name: label });
-    nodeIndex.set(label, idx);
+    nodeIndex.set(key, idx);
     return idx;
   }
 
@@ -48,8 +51,8 @@ export function toSankeyData(rows: PathRow[]): SankeyData {
     if (steps.length < 2) continue;
 
     for (let i = 0; i < steps.length - 1; i++) {
-      const src = getNode(steps[i]);
-      const tgt = getNode(steps[i + 1]);
+      const src = getNode(steps[i], i);
+      const tgt = getNode(steps[i + 1], i + 1);
       const key = linkKey(src, tgt);
       const existing = linkMap.get(key);
       if (existing) {
@@ -68,5 +71,27 @@ export function toSankeyData(rows: PathRow[]): SankeyData {
     }
   }
 
-  return { nodes, links: Array.from(linkMap.values()) };
+  // d3-sankey throws on self-loops — drop them
+  const safeLinks = Array.from(linkMap.values()).filter((l) => l.source !== l.target);
+
+  // Remove orphaned nodes (not referenced by any link) — d3-sankey produces NaN positions for them.
+  // Rebuild a compact node array and remap link indices.
+  const usedIndices = new Set<number>();
+  for (const l of safeLinks) {
+    usedIndices.add(l.source);
+    usedIndices.add(l.target);
+  }
+  const oldToNew = new Map<number, number>();
+  const compactNodes: SankeyNode[] = [];
+  for (const oldIdx of usedIndices) {
+    oldToNew.set(oldIdx, compactNodes.length);
+    compactNodes.push(nodes[oldIdx]);
+  }
+  const compactLinks = safeLinks.map((l) => ({
+    ...l,
+    source: oldToNew.get(l.source)!,
+    target: oldToNew.get(l.target)!,
+  }));
+
+  return { nodes: compactNodes, links: compactLinks };
 }

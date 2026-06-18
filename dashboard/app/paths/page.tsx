@@ -1,9 +1,8 @@
 import { SankeyDiagram } from "@/components/SankeyDiagram";
+import { getProjects } from "@/lib/db";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
-
-const PROJECTS = ["echonote", "doclens"];
 
 function sevenDaysAgo(): string {
   const d = new Date();
@@ -16,7 +15,8 @@ export default async function PathsPage({
 }: {
   searchParams: Promise<{ project?: string; from?: string; to?: string }>;
 }) {
-  const { project = "echonote", from, to } = await searchParams;
+  const projects = await getProjects();
+  const { project = projects[0] ?? "", from, to } = await searchParams;
   const resolvedFrom = from ?? sevenDaysAgo();
 
   return (
@@ -33,7 +33,7 @@ export default async function PathsPage({
 
         {/* Project selector */}
         <div className="flex gap-2">
-          {PROJECTS.map((p) => (
+          {projects.map((p) => (
             <Link
               key={p}
               href={`/paths?project=${p}${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}

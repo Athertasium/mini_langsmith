@@ -7,6 +7,7 @@ Usage:
     chain.invoke(input, config={"callbacks": [tracer]})
 """
 
+import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -18,6 +19,35 @@ from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
 log = logging.getLogger(__name__)
+
+
+def _safe_json(obj: Any) -> Any:
+    """Recursively convert non-JSON-serializable objects to safe types."""
+    if obj is None or isinstance(obj, (bool, int, float, str)):
+        return obj
+    if isinstance(obj, dict):
+        return {k: _safe_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_safe_json(v) for v in obj]
+    # Pydantic v2
+    if hasattr(obj, "model_dump"):
+        return _safe_json(obj.model_dump())
+    # Pydantic v1
+    if hasattr(obj, "dict"):
+        return _safe_json(obj.dict())
+    # dataclasses
+    try:
+        import dataclasses
+        if dataclasses.is_dataclass(obj):
+            return _safe_json(dataclasses.asdict(obj))
+    except Exception:
+        pass
+    # last resort
+    try:
+        json.dumps(obj)
+        return obj
+    except TypeError:
+        return str(obj)
 
 
 def _now() -> datetime:
@@ -43,6 +73,7 @@ class CustomTracer(BaseCallbackHandler):
         self._router_decision_key = router_decision_key
         self._start_times: dict[str, datetime] = {}
         self._sessions: dict[str, str] = {}
+        self._names: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -74,13 +105,14 @@ class CustomTracer(BaseCallbackHandler):
     def _fire(self, payload: dict[str, Any]) -> None:
         """Fire-and-forget POST — never blocks calling thread."""
         payload.setdefault("project", self._project)
+        safe_payload = _safe_json(payload)
 
         def _send() -> None:
             try:
                 with httpx.Client(timeout=5.0) as client:
                     resp = client.post(
                         f"{self._endpoint}/runs",
-                        json=payload,
+                        json=safe_payload,
                         headers={"X-API-Key": self._api_key},
                     )
                     if resp.status_code not in (200, 202):
@@ -103,14 +135,20 @@ class CustomTracer(BaseCallbackHandler):
         parent_run_id: UUID | None = None,
         tags: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
+        name: str | None = None,
         **kwargs: Any,
     ) -> None:
         start = self._record_start(run_id)
+        llm_name = (
+            name
+            or (serialized or {}).get("name")
+            or (serialized or {}).get("id", ["unknown"])[-1]
+        )
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._get_session(run_id, parent_run_id),
-            "name": serialized.get("id", ["unknown"])[-1],
+            "name": llm_name,
             "run_type": "llm",
             "inputs": {"prompts": prompts},
             "start_time": _iso(start),
@@ -178,14 +216,21 @@ class CustomTracer(BaseCallbackHandler):
         run_id: UUID,
         parent_run_id: UUID | None = None,
         tags: list[str] | None = None,
+        name: str | None = None,
         **kwargs: Any,
     ) -> None:
+        node_name = (
+            name
+            or (serialized or {}).get("name")
+            or (serialized or {}).get("id", ["chain"])[-1]
+        )
+        self._names[self._key(run_id)] = node_name
         start = self._record_start(run_id)
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._get_session(run_id, parent_run_id),
-            "name": serialized.get("id", ["chain"])[-1],
+            "name": node_name,
             "run_type": "chain",
             "inputs": inputs,
             "start_time": _iso(start),
@@ -201,6 +246,7 @@ class CustomTracer(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         start = self._pop_start(run_id)
+        name = self._names.pop(self._key(run_id), "chain")
         branch_decision: str | None = None
         if isinstance(outputs, dict):
             val = outputs.get(self._router_decision_key)
@@ -210,7 +256,7 @@ class CustomTracer(BaseCallbackHandler):
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._lookup_session(run_id),
-            "name": "chain",
+            "name": name,
             "run_type": "chain",
             "outputs": outputs,
             "start_time": _iso(start) if start else _iso(_now()),
@@ -229,11 +275,12 @@ class CustomTracer(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         start = self._pop_start(run_id)
+        name = self._names.pop(self._key(run_id), "chain")
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._lookup_session(run_id),
-            "name": "chain",
+            "name": name,
             "run_type": "chain",
             "error": str(error),
             "start_time": _iso(start) if start else _iso(_now()),

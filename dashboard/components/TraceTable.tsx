@@ -15,9 +15,9 @@ import type { Run } from "@/lib/db";
 const col = createColumnHelper<Run>();
 
 function costUsd(run: Run): string {
-  const cost = (run.extra as Record<string, unknown> | null)?.cost_usd;
-  if (cost == null) return "—";
-  return `$${Number(cost).toFixed(4)}`;
+  const total = run.total_cost_usd;
+  if (total == null || total === 0) return "—";
+  return `$${Number(total).toFixed(4)}`;
 }
 
 const RUN_TYPE_STYLES: Record<string, { bg: string; color: string }> = {

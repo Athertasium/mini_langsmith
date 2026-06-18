@@ -30,6 +30,23 @@ export interface Run {
   tags: string[];
   extra: Record<string, unknown> | null;
   branch_decision: string | null;
+  total_cost_usd: number | null;
+}
+
+export interface RunFilters {
+  project?: string;
+  run_type?: string;
+  tag?: string;
+  error_only?: boolean;
+  from?: string;
+  to?: string;
+}
+
+export interface TrendPoint {
+  bucket: string;
+  p50: number;
+  p95: number;
+  count: number;
 }
 
 export interface PathRow {
@@ -38,17 +55,35 @@ export interface PathRow {
   session_ids: string[];
 }
 
-export async function getRootSpans(project?: string): Promise<Run[]> {
+export async function getRootSpans(filters: RunFilters = {}): Promise<Run[]> {
   const pool = getPool();
-  if (project) {
-    const { rows } = await pool.query<Run>(
-      `SELECT * FROM runs WHERE parent_id IS NULL AND project = $1 ORDER BY start_time DESC LIMIT 200`,
-      [project]
-    );
-    return rows;
-  }
+  const { project, run_type, tag, error_only, from, to } = filters;
+
+  const conditions: string[] = ["r.parent_id IS NULL"];
+  const params: unknown[] = [];
+  let i = 1;
+
+  if (project)     { conditions.push(`r.project = $${i++}`);            params.push(project); }
+  if (run_type)    { conditions.push(`r.run_type = $${i++}`);           params.push(run_type); }
+  if (tag)         { conditions.push(`$${i++} = ANY(r.tags)`);          params.push(tag); }
+  if (error_only)  { conditions.push(`r.error IS NOT NULL`); }
+  if (from)        { conditions.push(`r.start_time >= $${i++}::timestamptz`); params.push(from); }
+  if (to)          { conditions.push(`r.start_time < $${i++}::timestamptz`);  params.push(to); }
+
+  const where = conditions.join(" AND ");
+
   const { rows } = await pool.query<Run>(
-    `SELECT * FROM runs WHERE parent_id IS NULL ORDER BY start_time DESC LIMIT 200`
+    `SELECT r.*,
+       (
+         SELECT COALESCE(SUM((r2.extra->>'cost_usd')::numeric), 0)
+         FROM runs r2
+         WHERE r2.session_id = r.session_id AND r.session_id IS NOT NULL
+       ) AS total_cost_usd
+     FROM runs r
+     WHERE ${where}
+     ORDER BY r.start_time DESC
+     LIMIT 200`,
+    params,
   );
   return rows;
 }
@@ -83,7 +118,6 @@ export async function getPathFrequency(
          ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY start_time) AS step_order
        FROM runs
        WHERE project = $1
-         AND run_type = 'chain'
          AND session_id IS NOT NULL
          AND ($2::timestamptz IS NULL OR start_time >= $2::timestamptz)
          AND ($3::timestamptz IS NULL OR start_time < $3::timestamptz)
@@ -105,6 +139,34 @@ export async function getPathFrequency(
     [project, from ?? null, to ?? null],
   );
   return rows;
+}
+
+export async function getLatencyTrend(project?: string): Promise<TrendPoint[]> {
+  const pool = getPool();
+  const { rows } = await pool.query<TrendPoint>(
+    `SELECT
+       DATE_TRUNC('hour', start_time) AS bucket,
+       PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY latency_ms)::int AS p50,
+       PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)::int AS p95,
+       COUNT(*)::int AS count
+     FROM runs
+     WHERE parent_id IS NULL
+       AND latency_ms IS NOT NULL
+       AND ($1::text IS NULL OR project = $1)
+       AND start_time >= NOW() - INTERVAL '7 days'
+     GROUP BY bucket
+     ORDER BY bucket`,
+    [project ?? null],
+  );
+  return rows;
+}
+
+export async function getProjects(): Promise<string[]> {
+  const pool = getPool();
+  const { rows } = await pool.query<{ project: string }>(
+    `SELECT DISTINCT project FROM runs ORDER BY project`
+  );
+  return rows.map((r) => r.project);
 }
 
 export async function getRun(id: string): Promise<Run | null> {

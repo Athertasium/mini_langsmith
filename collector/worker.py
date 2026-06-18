@@ -57,11 +57,41 @@ def _row(span: dict[str, Any]) -> tuple[Any, ...]:
 async def _insert_batch(spans: list[dict[str, Any]]) -> None:
     # _start and _end for the same run_id can land in the same batch.
     # Postgres rejects double-upsert on the same conflict key within one statement.
-    # Deduplicate by id, keeping the last occurrence (_end has outputs/end_time).
+    # Merge: keep name/inputs/session_id/tags from first (start), overlay
+    # outputs/end_time/error/extra/branch_decision from last (end).
     deduped: dict[str, dict[str, Any]] = {}
     for span in spans:
-        deduped[span["id"]] = span
-    spans = list(deduped.values())
+        sid = span["id"]
+        if sid in deduped:
+            prev = deduped[sid]
+            merged = {**prev}
+            for field in ("outputs", "end_time", "error", "extra", "branch_decision"):
+                if span.get(field) is not None:
+                    merged[field] = span[field]
+            deduped[sid] = merged
+        else:
+            deduped[sid] = span
+    # Topological sort: parents must be inserted before children.
+    # Spans whose parent_id is not in this batch are already in DB — treat as satisfied.
+    batch_ids = {s["id"] for s in deduped.values()}
+    ordered: list[dict[str, Any]] = []
+    remaining = list(deduped.values())
+    inserted_ids: set[str] = set()
+    max_passes = len(remaining) + 1
+    passes = 0
+    while remaining and passes < max_passes:
+        passes += 1
+        next_remaining = []
+        for span in remaining:
+            pid = span.get("parent_id")
+            if pid is None or pid not in batch_ids or pid in inserted_ids:
+                ordered.append(span)
+                inserted_ids.add(span["id"])
+            else:
+                next_remaining.append(span)
+        remaining = next_remaining
+    ordered.extend(remaining)  # cycles/unresolved — insert anyway, may still fail FK
+    spans = ordered
 
     pool = await get_pool()
     col_list = ", ".join(INSERT_COLS)
@@ -83,7 +113,21 @@ async def _insert_batch(spans: list[dict[str, Any]]) -> None:
     )
 
     async with pool.acquire() as conn:
-        await conn.execute(sql, *args)
+        try:
+            await conn.execute(sql, *args)
+        except Exception as batch_err:
+            log.warning("Batch insert failed (%s) — retrying spans individually", batch_err)
+            for span in spans:
+                single_row = _row(span)
+                single_group = "(" + ", ".join(f"${j + 1}" for j in range(len(INSERT_COLS))) + ")"
+                single_sql = (
+                    f"INSERT INTO runs ({col_list}) VALUES {single_group} "
+                    f"ON CONFLICT (id) DO UPDATE SET {update_clause}"
+                )
+                try:
+                    await conn.execute(single_sql, *single_row)
+                except Exception as span_err:
+                    log.warning("Dropping span %s — %s", span.get("id"), span_err)
 
 
 async def drain_loop() -> None:
