@@ -30,15 +30,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col" style={{ background: "var(--background)", color: "var(--text-primary)" }}>
         <nav style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }} className="px-6 py-3 flex items-center gap-6">
-          <span className="font-bold text-sm tracking-wide" style={{ color: "var(--accent)" }}>⬡ Tracer</span>
-          <Link href="/traces" className="text-sm transition-colors" style={{ color: "var(--text-secondary)" }}>
-            Traces
-          </Link>
-          <Link href="/paths" className="text-sm transition-colors" style={{ color: "var(--text-secondary)" }}>
-            Paths
-          </Link>
-          <Link href="/cost" className="text-sm transition-colors" style={{ color: "var(--text-secondary)" }}>
-            Cost
+          <Link href="/projects" className="font-bold text-sm tracking-wide" style={{ color: "var(--accent)" }}>⬡ Tracer</Link>
+          <Link href="/projects" className="text-sm transition-colors" style={{ color: "var(--text-secondary)" }}>
+            Projects
           </Link>
         </nav>
         <main className="flex-1">{children}</main>

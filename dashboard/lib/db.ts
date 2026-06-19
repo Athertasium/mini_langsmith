@@ -288,6 +288,41 @@ export async function getDailyCostTrend(
   return rows;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  run_count: number;
+}
+
+export async function getProjectsList(): Promise<Project[]> {
+  const pool = getPool();
+  const { rows } = await pool.query<Project>(
+    `SELECT p.id, p.name, p.description, p.created_at,
+            COUNT(DISTINCT r.id)::int AS run_count
+     FROM projects p
+     LEFT JOIN runs r ON r.project = p.name
+     GROUP BY p.id
+     ORDER BY p.created_at DESC`
+  );
+  return rows;
+}
+
+export async function createProject(
+  name: string,
+  description?: string,
+): Promise<Project> {
+  const pool = getPool();
+  const { rows } = await pool.query<Project>(
+    `INSERT INTO projects (name, description)
+     VALUES ($1, $2)
+     RETURNING id, name, description, created_at, 0 AS run_count`,
+    [name, description ?? null],
+  );
+  return rows[0];
+}
+
 export async function getRun(id: string): Promise<Run | null> {
   const pool = getPool();
   const { rows } = await pool.query<Run>(`SELECT * FROM runs WHERE id = $1`, [

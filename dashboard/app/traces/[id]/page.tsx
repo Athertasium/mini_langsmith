@@ -19,11 +19,11 @@ export default async function TraceDetailPage({
     <div className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6 flex items-center gap-3">
         <Link
-          href="/traces"
+          href={`/traces?project=${encodeURIComponent(root.project)}`}
           className="text-sm hover:underline"
           style={{ color: "var(--accent)" }}
         >
-          ← Traces
+          ← {root.project}
         </Link>
         <span style={{ color: "var(--border)" }}>/</span>
         <h1 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>

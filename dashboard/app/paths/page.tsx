@@ -1,5 +1,6 @@
 import { SankeyDiagram } from "@/components/SankeyDiagram";
-import { getProjects } from "@/lib/db";
+import { ProjectSubNav } from "@/components/ProjectSubNav";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -15,39 +16,20 @@ export default async function PathsPage({
 }: {
   searchParams: Promise<{ project?: string; from?: string; to?: string }>;
 }) {
-  const projects = await getProjects();
-  const { project = projects[0] ?? "", from, to } = await searchParams;
+  const { project = "", from, to } = await searchParams;
+  if (!project) redirect("/projects");
   const resolvedFrom = from ?? sevenDaysAgo();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-            Routing Paths
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-            Which node sequences actually fire across traces — and how often.
-          </p>
-        </div>
-
-        {/* Project selector */}
-        <div className="flex gap-2">
-          {projects.map((p) => (
-            <Link
-              key={p}
-              href={`/paths?project=${p}${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
-              className="rounded px-3 py-1.5 text-sm font-medium transition-colors"
-              style={
-                project === p
-                  ? { background: "var(--accent)", color: "#fff" }
-                  : { background: "var(--surface-2)", color: "var(--text-secondary)" }
-              }
-            >
-              {p}
-            </Link>
-          ))}
-        </div>
+      <ProjectSubNav project={project} active="paths" />
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+          Routing Paths — {project}
+        </h1>
+        <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+          Which node sequences actually fire across traces — and how often.
+        </p>
       </div>
 
       {/* Date range quick-selects */}
@@ -60,7 +42,7 @@ export default async function PathsPage({
           const f = days
             ? new Date(Date.now() - days * 86400_000).toISOString()
             : undefined;
-          const href = `/paths?project=${project}${f ? `&from=${f}` : ""}`;
+          const href = `/paths?project=${encodeURIComponent(project)}${f ? `&from=${f}` : ""}`;
           const active = days === null ? !from : resolvedFrom.startsWith(f?.slice(0, 10) ?? "");
           return (
             <Link
@@ -87,7 +69,6 @@ export default async function PathsPage({
         <SankeyDiagram project={project} from={resolvedFrom} to={to} />
       </div>
 
-      {/* Legend */}
       <p className="mt-4 text-xs" style={{ color: "var(--text-secondary)" }}>
         Stream width ∝ trace frequency. Hover a link to see count and jump to matching traces.
         Node labels show <code>name</code> (top) and <code>:branch_decision</code> (bottom) when present.

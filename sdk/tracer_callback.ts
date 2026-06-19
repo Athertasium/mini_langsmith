@@ -13,11 +13,15 @@
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import type { Serialized } from "@langchain/core/load/serializable";
 import type { LLMResult } from "@langchain/core/outputs";
+import type { BaseMessage } from "@langchain/core/messages";
 
 interface TracerOptions {
-  endpoint: string;
-  project: string;
-  apiKey: string;
+  /** Falls back to TRACER_ENDPOINT env var. Default: "http://localhost:8000" */
+  endpoint?: string;
+  /** Falls back to TRACER_NAME then PROJECT env var. */
+  project?: string;
+  /** Falls back to TRACER_API_KEY env var. */
+  apiKey?: string;
   /** Key in chain outputs that holds the routing decision. Default: "routerDecision" */
   routerDecisionKey?: string;
 }
@@ -34,11 +38,19 @@ export class CustomTracer extends BaseCallbackHandler {
   private readonly startTimes = new Map<string, number>();
   private readonly sessions = new Map<string, string>();
 
-  constructor({ endpoint, project, apiKey, routerDecisionKey = "routerDecision" }: TracerOptions) {
+  constructor({ endpoint, project, apiKey, routerDecisionKey = "routerDecision" }: TracerOptions = {}) {
     super();
-    this.endpoint = endpoint.replace(/\/$/, "");
-    this.project = project;
-    this.apiKey = apiKey;
+    const resolvedProject = project ?? process.env.TRACER_NAME ?? process.env.PROJECT;
+    if (!resolvedProject) throw new Error("CustomTracer: project required — pass project: or set TRACER_NAME env var");
+
+    const resolvedApiKey = apiKey ?? process.env.TRACER_API_KEY;
+    if (!resolvedApiKey) throw new Error("CustomTracer: apiKey required — pass apiKey: or set TRACER_API_KEY env var");
+
+    const resolvedEndpoint = endpoint ?? process.env.TRACER_ENDPOINT ?? "http://localhost:8000";
+
+    this.endpoint = resolvedEndpoint.replace(/\/$/, "");
+    this.project = resolvedProject;
+    this.apiKey = resolvedApiKey;
     this.routerDecisionKey = routerDecisionKey;
   }
 
@@ -100,6 +112,31 @@ export class CustomTracer extends BaseCallbackHandler {
       name: llm.id?.[llm.id.length - 1] ?? "llm",
       run_type: "llm",
       inputs: { prompts },
+      start_time: startTime,
+      tags: tags ?? [],
+    });
+  }
+
+  async handleChatModelStart(
+    llm: Serialized,
+    messages: BaseMessage[][],
+    runId: string,
+    parentRunId?: string,
+    _extraParams?: Record<string, unknown>,
+    tags?: string[],
+  ): Promise<void> {
+    const startTime = this.recordStart(runId);
+    this.fire({
+      id: runId,
+      parent_id: parentRunId ?? null,
+      session_id: this.getSession(runId, parentRunId),
+      name: llm.id?.[llm.id.length - 1] ?? "llm",
+      run_type: "llm",
+      inputs: {
+        messages: messages.map((batch) =>
+          batch.map((m) => ({ role: m._getType(), content: m.content }))
+        ),
+      },
       start_time: startTime,
       tags: tags ?? [],
     });

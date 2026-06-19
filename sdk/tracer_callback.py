@@ -9,6 +9,7 @@ Usage:
 
 import json
 import logging
+import os
 import threading
 from datetime import datetime, timezone
 from typing import Any
@@ -98,13 +99,18 @@ class CustomTracer(BaseCallbackHandler):
     def __init__(
         self,
         endpoint: str,
-        project: str,
         api_key: str,
+        project: str | None = None,
         router_decision_key: str = "routerDecision",
     ) -> None:
         super().__init__()
+        resolved = project or os.environ.get("TRACER_NAME") or os.environ.get("PROJECT")
+        if not resolved:
+            raise ValueError(
+                "project name required: pass project= or set TRACER_NAME env var"
+            )
         self._endpoint = endpoint.rstrip("/")
-        self._project = project
+        self._project = resolved
         self._api_key = api_key
         self._router_decision_key = router_decision_key
         self._start_times: dict[str, datetime] = {}

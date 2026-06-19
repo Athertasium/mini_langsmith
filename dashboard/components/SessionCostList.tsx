@@ -59,7 +59,7 @@ export function SessionCostList({ project, from, to }: Props) {
             >
               <td className="px-4 py-3">
                 <Link
-                  href={`/traces?session_id=${row.session_id}`}
+                  href={`/traces?project=${encodeURIComponent(project)}&session_id=${row.session_id}`}
                   className="font-mono text-xs hover:underline"
                   style={{ color: "var(--accent)" }}
                 >

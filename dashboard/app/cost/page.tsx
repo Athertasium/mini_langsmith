@@ -1,7 +1,8 @@
 import { CostTrendChart } from "@/components/CostTrendChart";
 import { NodeCostTable } from "@/components/NodeCostTable";
 import { SessionCostList } from "@/components/SessionCostList";
-import { getProjects } from "@/lib/db";
+import { ProjectSubNav } from "@/components/ProjectSubNav";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -17,40 +18,21 @@ export default async function CostPage({
 }: {
   searchParams: Promise<{ project?: string; from?: string; to?: string }>;
 }) {
-  const projects = await getProjects();
-  const { project = projects[0] ?? "", from, to } = await searchParams;
+  const { project = "", from, to } = await searchParams;
+  if (!project) redirect("/projects");
   const resolvedFrom = from ?? daysAgo(7);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
+      <ProjectSubNav project={project} active="cost" />
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-            Cost Attribution
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-            Spend breakdown by node, session, and day — so you know exactly where tokens go.
-          </p>
-        </div>
-
-        {/* Project selector */}
-        <div className="flex gap-2">
-          {projects.map((p) => (
-            <Link
-              key={p}
-              href={`/cost?project=${p}${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`}
-              className="rounded px-3 py-1.5 text-sm font-medium transition-colors"
-              style={
-                project === p
-                  ? { background: "var(--accent)", color: "#fff" }
-                  : { background: "var(--surface-2)", color: "var(--text-secondary)" }
-              }
-            >
-              {p}
-            </Link>
-          ))}
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+          Cost Attribution — {project}
+        </h1>
+        <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+          Spend breakdown by node, session, and day — so you know exactly where tokens go.
+        </p>
       </div>
 
       {/* Date range quick-selects */}
@@ -61,7 +43,7 @@ export default async function CostPage({
           { label: "All time", days: null },
         ].map(({ label, days }) => {
           const f = days ? daysAgo(days) : undefined;
-          const href = `/cost?project=${project}${f ? `&from=${f}` : ""}`;
+          const href = `/cost?project=${encodeURIComponent(project)}${f ? `&from=${f}` : ""}`;
           const active =
             days === null
               ? !from

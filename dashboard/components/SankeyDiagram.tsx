@@ -208,7 +208,7 @@ export function SankeyDiagram({ project, from, to }: Props) {
           <span>{hoveredLink.value} trace{hoveredLink.value !== 1 ? "s" : ""}</span>
           {"  "}
           <Link
-            href={`/traces?sessions=${hoveredLink.sessionIds.slice(0, 50).join(",")}`}
+            href={`/traces?project=${encodeURIComponent(project)}&sessions=${hoveredLink.sessionIds.slice(0, 50).join(",")}`}
             className="underline"
             style={{ color: accent }}
           >
