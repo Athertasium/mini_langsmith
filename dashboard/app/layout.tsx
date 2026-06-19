@@ -37,6 +37,9 @@ export default function RootLayout({
           <Link href="/paths" className="text-sm transition-colors" style={{ color: "var(--text-secondary)" }}>
             Paths
           </Link>
+          <Link href="/cost" className="text-sm transition-colors" style={{ color: "var(--text-secondary)" }}>
+            Cost
+          </Link>
         </nav>
         <main className="flex-1">{children}</main>
       </body>

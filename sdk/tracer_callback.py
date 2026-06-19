@@ -50,6 +50,42 @@ def _safe_json(obj: Any) -> Any:
         return str(obj)
 
 
+# Per-1M-token pricing (input_usd, output_usd)
+_PRICING: dict[str, tuple[float, float]] = {
+    "gpt-4o":                       (2.50,  10.00),
+    "gpt-4o-mini":                  (0.15,   0.60),
+    "gpt-4-turbo":                  (10.00, 30.00),
+    "gpt-4":                        (30.00, 60.00),
+    "gpt-3.5-turbo":                (0.50,   1.50),
+    "claude-3-5-sonnet":            (3.00,  15.00),
+    "claude-3-5-haiku":             (0.80,   4.00),
+    "claude-3-opus":                (15.00, 75.00),
+    "claude-3-haiku":               (0.25,   1.25),
+    "claude-sonnet-4":              (3.00,  15.00),
+    "claude-haiku-4-5-20251001":    (1.00,   5.00),
+    "llama3-8b-8192":               (0.05,   0.08),
+    "llama3-70b-8192":              (0.59,   0.79),
+    "llama-3.1-8b-instant":         (0.05,   0.08),
+    "llama-3.3-70b-versatile":      (0.59,   0.79),
+    "mixtral-8x7b-32768":           (0.24,   0.24),
+    "gemma-7b-it":                  (0.07,   0.07),
+}
+
+
+def _compute_cost(
+    model: str | None,
+    prompt_tokens: int | None,
+    completion_tokens: int | None,
+) -> float | None:
+    if not model or prompt_tokens is None or completion_tokens is None:
+        return None
+    key = model.lower()
+    for name, (inp, out) in _PRICING.items():
+        if name in key or key.startswith(name):
+            return (prompt_tokens * inp + completion_tokens * out) / 1_000_000
+    return None
+
+
 def _now() -> datetime:
     return datetime.now(tz=timezone.utc)
 
@@ -123,8 +159,37 @@ class CustomTracer(BaseCallbackHandler):
         threading.Thread(target=_send, daemon=True).start()
 
     # ------------------------------------------------------------------
-    # LLM
+    # LLM  (text LLMs → on_llm_start; chat models → on_chat_model_start)
     # ------------------------------------------------------------------
+
+    def on_chat_model_start(
+        self,
+        serialized: dict[str, Any],
+        messages: list[list[Any]],
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        name: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        start = self._record_start(run_id)
+        llm_name = (
+            name
+            or (serialized or {}).get("name")
+            or (serialized or {}).get("id", ["unknown"])[-1]
+        )
+        self._fire({
+            "id": str(run_id),
+            "parent_id": str(parent_run_id) if parent_run_id else None,
+            "session_id": self._get_session(run_id, parent_run_id),
+            "name": llm_name,
+            "run_type": "llm",
+            "inputs": {"messages": [[str(m) for m in ms] for ms in messages]},
+            "start_time": _iso(start),
+            "tags": tags or [],
+        })
 
     def on_llm_start(
         self,
@@ -165,7 +230,24 @@ class CustomTracer(BaseCallbackHandler):
     ) -> None:
         start = self._pop_start(run_id)
         llm_output = response.llm_output or {}
-        token_usage = llm_output.get("token_usage", {})
+        # OpenAI/Groq: token_usage / model_name
+        # Anthropic:   usage (input_tokens/output_tokens) / model
+        token_usage = llm_output.get("token_usage") or llm_output.get("usage") or {}
+        model_name = llm_output.get("model_name") or llm_output.get("model")
+        prompt_tokens = token_usage.get("prompt_tokens") or token_usage.get("input_tokens")
+        completion_tokens = token_usage.get("completion_tokens") or token_usage.get("output_tokens")
+        total_tokens = token_usage.get("total_tokens") or (
+            (prompt_tokens or 0) + (completion_tokens or 0) if prompt_tokens or completion_tokens else None
+        )
+        extra: dict[str, Any] = {
+            "model_name": model_name,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        }
+        cost = _compute_cost(model_name, prompt_tokens, completion_tokens)
+        if cost is not None:
+            extra["cost_usd"] = cost
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
@@ -176,12 +258,7 @@ class CustomTracer(BaseCallbackHandler):
             "outputs": {"generations": [[g.text for g in gen] for gen in response.generations]},
             "start_time": _iso(start) if start else _iso(_now()),
             "end_time": _iso(_now()),
-            "extra": {
-                "model_name": llm_output.get("model_name"),
-                "prompt_tokens": token_usage.get("prompt_tokens"),
-                "completion_tokens": token_usage.get("completion_tokens"),
-                "total_tokens": token_usage.get("total_tokens"),
-            },
+            "extra": extra,
         })
 
     def on_llm_error(

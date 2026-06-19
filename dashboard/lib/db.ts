@@ -169,6 +169,125 @@ export async function getProjects(): Promise<string[]> {
   return rows.map((r) => r.project);
 }
 
+export interface NodeCostRow {
+  project: string;
+  name: string;
+  run_type: string;
+  call_count: number;
+  total_cost: number;
+  avg_cost: number;
+  pct_of_total: number;
+}
+
+export interface SessionCostRow {
+  session_id: string;
+  project: string;
+  started_at: string;
+  total_cost: number;
+  span_count: number;
+}
+
+export interface DailyCostPoint {
+  bucket: string;
+  project: string;
+  total_cost: number;
+  span_count: number;
+}
+
+export async function getNodeCostBreakdown(
+  project: string,
+  from?: string,
+  to?: string,
+): Promise<NodeCostRow[]> {
+  const pool = getPool();
+  const { rows } = await pool.query<NodeCostRow>(
+    `WITH node_costs AS (
+       SELECT
+         project,
+         name,
+         run_type,
+         COUNT(*)::int                                        AS call_count,
+         COALESCE(SUM((extra->>'cost_usd')::numeric), 0)     AS total_cost,
+         COALESCE(AVG((extra->>'cost_usd')::numeric), 0)     AS avg_cost
+       FROM runs
+       WHERE project = $1
+         AND ($2::timestamptz IS NULL OR start_time >= $2)
+         AND ($3::timestamptz IS NULL OR start_time <  $3)
+       GROUP BY project, name, run_type
+     ),
+     project_total AS (
+       SELECT COALESCE(SUM(total_cost), 0) AS grand_total FROM node_costs
+     )
+     SELECT
+       nc.project,
+       nc.name,
+       nc.run_type,
+       nc.call_count,
+       nc.total_cost,
+       nc.avg_cost,
+       ROUND(
+         CASE WHEN pt.grand_total > 0
+              THEN (nc.total_cost / pt.grand_total * 100)
+              ELSE 0
+         END, 2
+       ) AS pct_of_total
+     FROM node_costs nc
+     CROSS JOIN project_total pt
+     ORDER BY nc.total_cost DESC`,
+    [project, from ?? null, to ?? null],
+  );
+  return rows;
+}
+
+export async function getSessionCostRollup(
+  project: string,
+  from?: string,
+  to?: string,
+): Promise<SessionCostRow[]> {
+  const pool = getPool();
+  const { rows } = await pool.query<SessionCostRow>(
+    `SELECT
+       session_id::text,
+       project,
+       MIN(start_time)                                       AS started_at,
+       COALESCE(SUM((extra->>'cost_usd')::numeric), 0)      AS total_cost,
+       COUNT(*)::int                                         AS span_count
+     FROM runs
+     WHERE session_id IS NOT NULL
+       AND project = $1
+       AND ($2::timestamptz IS NULL OR start_time >= $2)
+       AND ($3::timestamptz IS NULL OR start_time <  $3)
+     GROUP BY session_id, project
+     ORDER BY started_at DESC
+     LIMIT 200`,
+    [project, from ?? null, to ?? null],
+  );
+  return rows;
+}
+
+export async function getDailyCostTrend(
+  project?: string,
+  from?: string,
+  to?: string,
+): Promise<DailyCostPoint[]> {
+  const pool = getPool();
+  const { rows } = await pool.query<DailyCostPoint>(
+    `SELECT
+       DATE_TRUNC('day', start_time)                         AS bucket,
+       project,
+       COALESCE(SUM((extra->>'cost_usd')::numeric), 0)      AS total_cost,
+       COUNT(*)::int                                         AS span_count
+     FROM runs
+     WHERE ($1::text IS NULL OR project = $1)
+       AND ($2::timestamptz IS NULL OR start_time >= $2)
+       AND ($3::timestamptz IS NULL OR start_time <  $3)
+     GROUP BY DATE_TRUNC('day', start_time), project
+     ORDER BY bucket`,
+    [project ?? null, from ?? null, to ?? null],
+  );
+  return rows;
+}
+
 export async function getRun(id: string): Promise<Run | null> {
   const pool = getPool();
   const { rows } = await pool.query<Run>(`SELECT * FROM runs WHERE id = $1`, [
