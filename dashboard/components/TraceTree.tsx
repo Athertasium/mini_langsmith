@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { JsonView, allExpanded, darkStyles } from "react-json-view-lite";
+import "react-json-view-lite/dist/index.css";
+import { SparklineChart } from "@/components/SparklineChart";
 import type { Run } from "@/lib/db";
 
 const RUN_TYPE_STYLES: Record<string, { bg: string; color: string }> = {
@@ -10,7 +14,55 @@ const RUN_TYPE_STYLES: Record<string, { bg: string; color: string }> = {
   retriever: { bg: "#1e2a2a", color: "#34d399" },
 };
 
-function SpanNode({ span, depth }: { span: RunNode; depth: number }) {
+function JsonField({ value }: { value: unknown }) {
+  if (value === null || value === undefined) return null;
+  return (
+    <div className="rounded overflow-auto text-xs" style={{ background: "var(--background)", maxHeight: 400 }}>
+      <JsonView data={value} shouldExpandNode={allExpanded} style={darkStyles} />
+    </div>
+  );
+}
+
+function LlmOutputField({ value }: { value: unknown }) {
+  const text =
+    typeof value === "string"
+      ? value
+      : typeof value === "object" && value !== null && "text" in (value as Record<string, unknown>)
+        ? String((value as Record<string, unknown>).text)
+        : typeof value === "object" && value !== null && "content" in (value as Record<string, unknown>)
+          ? String((value as Record<string, unknown>).content)
+          : null;
+
+  if (text) {
+    return (
+      <div
+        className="prose prose-invert prose-sm max-w-none rounded p-3 text-xs overflow-x-auto"
+        style={{ background: "var(--background)", color: "#86efac" }}
+      >
+        <ReactMarkdown>{text}</ReactMarkdown>
+      </div>
+    );
+  }
+  return <JsonField value={value} />;
+}
+
+function ErrorBlock({ error }: { error: string }) {
+  return (
+    <pre
+      className="overflow-x-auto rounded p-3 text-xs whitespace-pre-wrap"
+      style={{
+        background: "#2a0a0a",
+        color: "#fca5a5",
+        fontFamily: "var(--font-geist-mono)",
+        border: "1px solid #7f1d1d",
+      }}
+    >
+      {error}
+    </pre>
+  );
+}
+
+function SpanNode({ span, depth, project }: { span: RunNode; depth: number; project: string }) {
   const [expanded, setExpanded] = useState(false);
   const hasChildren = span.children.length > 0;
   const hasError = span.error != null;
@@ -18,6 +70,7 @@ function SpanNode({ span, depth }: { span: RunNode; depth: number }) {
 
   const borderColor = hasError ? "#dc2626" : "var(--border)";
   const bgColor = hasError ? "#1f0a0a" : "var(--surface)";
+  const isLlm = span.run_type === "llm";
 
   return (
     <div
@@ -41,6 +94,7 @@ function SpanNode({ span, depth }: { span: RunNode; depth: number }) {
         <span className="flex-1 font-medium text-sm" style={{ color: "var(--text-primary)" }}>
           {span.name}
         </span>
+        <SparklineChart project={project} name={span.name} />
         {span.latency_ms != null && (
           <span
             className="text-xs shrink-0"
@@ -54,35 +108,30 @@ function SpanNode({ span, depth }: { span: RunNode; depth: number }) {
             ERROR
           </span>
         )}
-        {(hasChildren || span.inputs || span.outputs) && (
+        {(hasChildren || span.inputs || span.outputs || hasError) && (
           <span className="text-xs shrink-0" style={{ color: "var(--text-secondary)" }}>
             {expanded ? "▲" : "▼"}
           </span>
         )}
       </div>
 
-      {hasError && (
-        <div
-          className="px-4 py-2 text-sm"
-          style={{ borderTop: "1px solid #7f1d1d", background: "#2a0a0a", color: "#fca5a5" }}
-        >
-          <strong>Error:</strong> {span.error}
+      {expanded && hasError && (
+        <div className="px-4 py-3" style={{ borderTop: "1px solid #7f1d1d" }}>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "#f87171" }}>
+            Error
+          </p>
+          <ErrorBlock error={span.error!} />
         </div>
       )}
 
-      {expanded && (span.inputs || span.outputs) && (
-        <div className="px-4 py-3 text-sm" style={{ borderTop: "1px solid var(--border)" }}>
+      {expanded && !hasError && (span.inputs || span.outputs || span.extra) && (
+        <div className="px-4 py-3 text-sm space-y-4" style={{ borderTop: "1px solid var(--border)" }}>
           {span.inputs && (
-            <div className="mb-3">
+            <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
                 Inputs
               </p>
-              <pre
-                className="overflow-x-auto rounded p-3 text-xs"
-                style={{ background: "var(--background)", color: "#a5b4fc", fontFamily: "var(--font-geist-mono)" }}
-              >
-                {JSON.stringify(span.inputs, null, 2)}
-              </pre>
+              <JsonField value={span.inputs} />
             </div>
           )}
           {span.outputs && (
@@ -90,12 +139,15 @@ function SpanNode({ span, depth }: { span: RunNode; depth: number }) {
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
                 Outputs
               </p>
-              <pre
-                className="overflow-x-auto rounded p-3 text-xs"
-                style={{ background: "var(--background)", color: "#86efac", fontFamily: "var(--font-geist-mono)" }}
-              >
-                {JSON.stringify(span.outputs, null, 2)}
-              </pre>
+              {isLlm ? <LlmOutputField value={span.outputs} /> : <JsonField value={span.outputs} />}
+            </div>
+          )}
+          {span.extra && (
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
+                Extra
+              </p>
+              <JsonField value={span.extra} />
             </div>
           )}
         </div>
@@ -104,7 +156,7 @@ function SpanNode({ span, depth }: { span: RunNode; depth: number }) {
       {expanded && hasChildren && (
         <div className="pb-2 pr-2" style={{ borderTop: "1px solid var(--border)" }}>
           {span.children.map((child) => (
-            <SpanNode key={child.id} span={child} depth={0} />
+            <SpanNode key={child.id} span={child} depth={0} project={project} />
           ))}
         </div>
       )}
@@ -132,12 +184,12 @@ function buildTree(runs: Run[]): RunNode[] {
   return roots;
 }
 
-export function TraceTree({ spans }: { spans: Run[] }) {
+export function TraceTree({ spans, project }: { spans: Run[]; project: string }) {
   const roots = buildTree(spans);
   return (
     <div>
       {roots.map((root) => (
-        <SpanNode key={root.id} span={root} depth={0} />
+        <SpanNode key={root.id} span={root} depth={0} project={project} />
       ))}
     </div>
   );

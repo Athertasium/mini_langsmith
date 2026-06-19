@@ -66,7 +66,7 @@ export default async function TraceDetailPage({
         </div>
       </div>
 
-      <TraceTree spans={spans} />
+      <TraceTree spans={spans} project={root.project} />
     </div>
   );
 }
