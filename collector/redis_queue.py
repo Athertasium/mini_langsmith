@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -33,7 +34,9 @@ async def dequeue_batch(n: int = 50) -> list[dict[str, Any]]:
     return [json.loads(item) for item in raw]
 
 
-async def deadletter_spans(payloads: list[dict[str, Any]]) -> None:
+async def deadletter_spans(payloads: list[dict[str, Any]], error: str | None = None) -> None:
     client = _get_client()
+    failed_at = datetime.now(timezone.utc).isoformat()
     for payload in payloads:
-        await client.rpush(DEADLETTER_KEY, json.dumps(payload, default=str))
+        entry = {"payload": payload, "error": error, "failed_at": failed_at}
+        await client.rpush(DEADLETTER_KEY, json.dumps(entry, default=str))

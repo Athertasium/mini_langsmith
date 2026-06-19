@@ -127,7 +127,8 @@ async def _insert_batch(spans: list[dict[str, Any]]) -> None:
                 try:
                     await conn.execute(single_sql, *single_row)
                 except Exception as span_err:
-                    log.warning("Dropping span %s — %s", span.get("id"), span_err)
+                    log.warning("Dead-lettering span %s — %s", span.get("id"), span_err)
+                    await deadletter_spans([span], error=str(span_err))
 
 
 async def drain_loop() -> None:
@@ -140,9 +141,9 @@ async def drain_loop() -> None:
                 try:
                     await _insert_batch(spans)
                     log.info("Inserted %d spans", len(spans))
-                except Exception:
+                except Exception as batch_err:
                     log.exception("Batch insert failed — dead-lettering %d spans", len(spans))
-                    await deadletter_spans(spans)
+                    await deadletter_spans(spans, error=str(batch_err))
         except Exception:
             log.exception("Unexpected error in drain loop")
         await asyncio.sleep(POLL_INTERVAL)
