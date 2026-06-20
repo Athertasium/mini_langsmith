@@ -1,4 +1,4 @@
-import { getRootSpans, validateProjectOwner } from "@/lib/db";
+import { getRootSpans, getLatencyTrend, validateProjectOwner } from "@/lib/db";
 import { getServerUser } from "@/lib/session";
 import { TraceTable } from "@/components/TraceTable";
 import { LatencyChart } from "@/components/LatencyChart";
@@ -29,7 +29,10 @@ export default async function TracesPage({
   const from       = sp.from       ?? undefined;
   const to         = sp.to         ?? undefined;
 
-  const runs = await getRootSpans({ project, run_type, tag, error_only, from, to });
+  const [runs, trendData] = await Promise.all([
+    getRootSpans({ project, run_type, tag, error_only, from, to }),
+    getLatencyTrend(project, user.id),
+  ]);
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
@@ -67,7 +70,7 @@ export default async function TracesPage({
 
       {/* Latency trend */}
       <div className="mb-5">
-        <LatencyChart project={project} />
+        <LatencyChart project={project} initialData={trendData} />
       </div>
 
       <TraceTable data={runs} />

@@ -107,15 +107,17 @@ interface Props {
   project: string;
   from?: string;
   to?: string;
+  initialData?: NodeCostRow[];
 }
 
-export function NodeCostTable({ project, from, to }: Props) {
-  const [data, setData] = useState<NodeCostRow[]>([]);
+export function NodeCostTable({ project, from, to, initialData }: Props) {
+  const [data, setData] = useState<NodeCostRow[]>(initialData ?? []);
   const [sorting, setSorting] = useState<SortingState>([
     { id: "total_cost", desc: true },
   ]);
 
   useEffect(() => {
+    if (initialData) return;
     const qs = new URLSearchParams({ project });
     if (from) qs.set("from", from);
     if (to) qs.set("to", to);
@@ -123,7 +125,7 @@ export function NodeCostTable({ project, from, to }: Props) {
       .then((r) => r.json())
       .then((rows: NodeCostRow[]) => setData(rows))
       .catch(() => {});
-  }, [project, from, to]);
+  }, [project, from, to, initialData]);
 
   const table = useReactTable({
     data,

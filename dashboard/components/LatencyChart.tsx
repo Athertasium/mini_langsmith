@@ -15,12 +15,14 @@ import type { TrendPoint } from "@/lib/db";
 
 interface Props {
   project?: string;
+  initialData?: TrendPoint[];
 }
 
-export function LatencyChart({ project }: Props) {
-  const [data, setData] = useState<TrendPoint[]>([]);
+export function LatencyChart({ project, initialData }: Props) {
+  const [data, setData] = useState<TrendPoint[]>(initialData ?? []);
 
   useEffect(() => {
+    if (initialData) return;
     const url = project
       ? `/api/runs/trend?project=${project}`
       : "/api/runs/trend";
@@ -28,7 +30,7 @@ export function LatencyChart({ project }: Props) {
       .then((r) => r.json())
       .then((rows: TrendPoint[]) => setData(rows))
       .catch(() => {});
-  }, [project]);
+  }, [project, initialData]);
 
   if (data.length === 0) return null;
 

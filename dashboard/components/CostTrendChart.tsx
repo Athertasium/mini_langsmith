@@ -17,15 +17,19 @@ interface Props {
   project: string;
   from?: string;
   to?: string;
+  initialData?: DailyCostPoint[];
 }
 
 const PROJECT_COLORS = ["#6366f1", "#f472b6", "#34d399", "#facc15"];
 
-export function CostTrendChart({ project, from, to }: Props) {
-  const [data, setData] = useState<DailyCostPoint[]>([]);
-  const [projects, setProjects] = useState<string[]>([]);
+export function CostTrendChart({ project, from, to, initialData }: Props) {
+  const [data, setData] = useState<DailyCostPoint[]>(initialData ?? []);
+  const [projects, setProjects] = useState<string[]>(
+    initialData ? [...new Set(initialData.map((r) => r.project))] : []
+  );
 
   useEffect(() => {
+    if (initialData) return;
     const qs = new URLSearchParams({ project });
     if (from) qs.set("from", from);
     if (to) qs.set("to", to);
@@ -36,7 +40,7 @@ export function CostTrendChart({ project, from, to }: Props) {
         setProjects([...new Set(rows.map((r) => r.project))]);
       })
       .catch(() => {});
-  }, [project, from, to]);
+  }, [project, from, to, initialData]);
 
   if (data.length === 0) {
     return (

@@ -8,12 +8,14 @@ interface Props {
   project: string;
   from?: string;
   to?: string;
+  initialData?: SessionCostRow[];
 }
 
-export function SessionCostList({ project, from, to }: Props) {
-  const [data, setData] = useState<SessionCostRow[]>([]);
+export function SessionCostList({ project, from, to, initialData }: Props) {
+  const [data, setData] = useState<SessionCostRow[]>(initialData ?? []);
 
   useEffect(() => {
+    if (initialData) return;
     const qs = new URLSearchParams({ project });
     if (from) qs.set("from", from);
     if (to) qs.set("to", to);
@@ -21,7 +23,7 @@ export function SessionCostList({ project, from, to }: Props) {
       .then((r) => r.json())
       .then((rows: SessionCostRow[]) => setData(rows))
       .catch(() => {});
-  }, [project, from, to]);
+  }, [project, from, to, initialData]);
 
   return (
     <div

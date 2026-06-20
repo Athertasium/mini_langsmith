@@ -2,7 +2,12 @@ import { CostTrendChart } from "@/components/CostTrendChart";
 import { NodeCostTable } from "@/components/NodeCostTable";
 import { SessionCostList } from "@/components/SessionCostList";
 import { ProjectSubNav } from "@/components/ProjectSubNav";
-import { validateProjectOwner } from "@/lib/db";
+import {
+  validateProjectOwner,
+  getDailyCostTrend,
+  getNodeCostBreakdown,
+  getSessionCostRollup,
+} from "@/lib/db";
 import { getServerUser } from "@/lib/session";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -29,6 +34,12 @@ export default async function CostPage({
   const owns = await validateProjectOwner(project, user.id);
   if (!owns) redirect("/projects");
   const resolvedFrom = from ?? daysAgo(7);
+
+  const [trendData, nodeData, sessionData] = await Promise.all([
+    getDailyCostTrend(project, resolvedFrom, to, user.id),
+    getNodeCostBreakdown(project, resolvedFrom, to),
+    getSessionCostRollup(project, resolvedFrom, to),
+  ]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -85,13 +96,13 @@ export default async function CostPage({
 
       {/* Daily spend trend */}
       <div className="mb-6">
-        <CostTrendChart project={project} from={resolvedFrom} to={to} />
+        <CostTrendChart project={project} from={resolvedFrom} to={to} initialData={trendData} />
       </div>
 
       {/* Node breakdown + Session list side by side */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <NodeCostTable project={project} from={resolvedFrom} to={to} />
-        <SessionCostList project={project} from={resolvedFrom} to={to} />
+        <NodeCostTable project={project} from={resolvedFrom} to={to} initialData={nodeData} />
+        <SessionCostList project={project} from={resolvedFrom} to={to} initialData={sessionData} />
       </div>
     </div>
   );
