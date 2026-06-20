@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Pool } from "pg";
+import { validateProjectOwner } from "@/lib/db";
+import { getRequestUser } from "@/lib/session";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -25,6 +27,9 @@ export interface SparklineResponse {
 
 // GET /api/runs/sparkline?project=x&names[]=a&names[]=b
 export async function GET(req: NextRequest) {
+  const user = await getRequestUser(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = req.nextUrl;
   const project = searchParams.get("project");
   const names = searchParams.getAll("names[]");
@@ -36,9 +41,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "names[] required" }, { status: 400 });
   }
 
+  const owns = await validateProjectOwner(project, user.id);
+  if (!owns) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const pool = getPool();
 
-  // Batch query: fetch last 50 latency_ms per (project, name) in one round-trip
   const { rows } = await pool.query<{ name: string; latency_ms: number; start_time: string }>(
     `SELECT name, latency_ms, start_time
      FROM (
@@ -54,7 +61,6 @@ export async function GET(req: NextRequest) {
     [project, names]
   );
 
-  // Group by name
   const grouped = new Map<string, SparklinePoint[]>();
   for (const row of rows) {
     if (!grouped.has(row.name)) grouped.set(row.name, []);

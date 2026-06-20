@@ -1,4 +1,7 @@
 import { getProjectsList } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { CreateProjectForm } from "@/components/CreateProjectForm";
 import Link from "next/link";
 
@@ -35,7 +38,9 @@ function RunCountBar({ count }: { count: number }) {
 }
 
 export default async function ProjectsPage() {
-  const projects = await getProjectsList();
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect("/signin");
+  const projects = await getProjectsList(session.user.id);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">

@@ -1,9 +1,13 @@
 import { type NextRequest } from "next/server";
 import { getProjectsList, createProject } from "@/lib/db";
+import { getRequestUser } from "@/lib/session";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
-    const projects = await getProjectsList();
+    const projects = await getProjectsList(user.id);
     return Response.json(projects);
   } catch (err) {
     console.error("GET /api/projects failed", err);
@@ -12,13 +16,16 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const body = await request.json() as { name?: string; description?: string };
     const name = (body.name ?? "").trim();
     if (!name) {
       return Response.json({ error: "name is required" }, { status: 400 });
     }
-    const project = await createProject(name, body.description?.trim() || undefined);
+    const project = await createProject(name, body.description?.trim() || undefined, user.id);
     return Response.json(project, { status: 201 });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

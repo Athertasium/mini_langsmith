@@ -1,7 +1,11 @@
 import { type NextRequest } from "next/server";
-import { getPathFrequency } from "@/lib/db";
+import { getPathFrequency, validateProjectOwner } from "@/lib/db";
+import { getRequestUser } from "@/lib/session";
 
 export async function GET(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   const params = request.nextUrl.searchParams;
   const project = params.get("project");
   const from = params.get("from") ?? undefined;
@@ -10,6 +14,9 @@ export async function GET(request: NextRequest) {
   if (!project) {
     return Response.json({ error: "project is required" }, { status: 400 });
   }
+
+  const owns = await validateProjectOwner(project, user.id);
+  if (!owns) return Response.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const rows = await getPathFrequency(project, from, to);

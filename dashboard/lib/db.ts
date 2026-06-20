@@ -141,7 +141,7 @@ export async function getPathFrequency(
   return rows;
 }
 
-export async function getLatencyTrend(project?: string): Promise<TrendPoint[]> {
+export async function getLatencyTrend(project?: string, userId?: string): Promise<TrendPoint[]> {
   const pool = getPool();
   const { rows } = await pool.query<TrendPoint>(
     `SELECT
@@ -154,9 +154,10 @@ export async function getLatencyTrend(project?: string): Promise<TrendPoint[]> {
        AND latency_ms IS NOT NULL
        AND ($1::text IS NULL OR project = $1)
        AND start_time >= NOW() - INTERVAL '7 days'
+       AND ($2::text IS NULL OR project IN (SELECT name FROM projects WHERE user_id = $2))
      GROUP BY bucket
      ORDER BY bucket`,
-    [project ?? null],
+    [project ?? null, userId ?? null],
   );
   return rows;
 }
@@ -167,6 +168,27 @@ export async function getProjects(): Promise<string[]> {
     `SELECT DISTINCT project FROM runs ORDER BY project`
   );
   return rows.map((r) => r.project);
+}
+
+export async function validateProjectOwner(
+  project: string,
+  userId: string,
+): Promise<boolean> {
+  const pool = getPool();
+  const { rows } = await pool.query<{ exists: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM projects WHERE name = $1 AND user_id = $2) AS exists`,
+    [project, userId],
+  );
+  return rows[0]?.exists ?? false;
+}
+
+export async function getUserProjectNames(userId: string): Promise<string[]> {
+  const pool = getPool();
+  const { rows } = await pool.query<{ name: string }>(
+    `SELECT name FROM projects WHERE user_id = $1`,
+    [userId],
+  );
+  return rows.map((r) => r.name);
 }
 
 export interface NodeCostRow {
@@ -269,6 +291,7 @@ export async function getDailyCostTrend(
   project?: string,
   from?: string,
   to?: string,
+  userId?: string,
 ): Promise<DailyCostPoint[]> {
   const pool = getPool();
   const { rows } = await pool.query<DailyCostPoint>(
@@ -281,9 +304,10 @@ export async function getDailyCostTrend(
      WHERE ($1::text IS NULL OR project = $1)
        AND ($2::timestamptz IS NULL OR start_time >= $2)
        AND ($3::timestamptz IS NULL OR start_time <  $3)
+       AND ($4::text IS NULL OR project IN (SELECT name FROM projects WHERE user_id = $4))
      GROUP BY DATE_TRUNC('day', start_time), project
      ORDER BY bucket`,
-    [project ?? null, from ?? null, to ?? null],
+    [project ?? null, from ?? null, to ?? null, userId ?? null],
   );
   return rows;
 }
@@ -296,29 +320,32 @@ export interface Project {
   run_count: number;
 }
 
-export async function getProjectsList(): Promise<Project[]> {
+export async function getProjectsList(userId: string): Promise<Project[]> {
   const pool = getPool();
   const { rows } = await pool.query<Project>(
     `SELECT p.id, p.name, p.description, p.created_at,
             COUNT(DISTINCT r.id)::int AS run_count
      FROM projects p
      LEFT JOIN runs r ON r.project = p.name
+     WHERE p.user_id = $1
      GROUP BY p.id
-     ORDER BY p.created_at DESC`
+     ORDER BY p.created_at DESC`,
+    [userId],
   );
   return rows;
 }
 
 export async function createProject(
   name: string,
-  description?: string,
+  description: string | undefined,
+  userId: string,
 ): Promise<Project> {
   const pool = getPool();
   const { rows } = await pool.query<Project>(
-    `INSERT INTO projects (name, description)
-     VALUES ($1, $2)
+    `INSERT INTO projects (name, description, user_id)
+     VALUES ($1, $2, $3)
      RETURNING id, name, description, created_at, 0 AS run_count`,
-    [name, description ?? null],
+    [name, description ?? null, userId],
   );
   return rows[0];
 }
