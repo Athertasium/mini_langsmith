@@ -53,21 +53,27 @@ def _safe_json(obj: Any) -> Any:
 
 # Per-1M-token pricing (input_usd, output_usd)
 _PRICING: dict[str, tuple[float, float]] = {
+    # OpenAI
     "gpt-4o":                       (2.50,  10.00),
     "gpt-4o-mini":                  (0.15,   0.60),
     "gpt-4-turbo":                  (10.00, 30.00),
     "gpt-4":                        (30.00, 60.00),
     "gpt-3.5-turbo":                (0.50,   1.50),
+    # Anthropic Claude 4.x
+    "claude-opus-4":                (15.00, 75.00),
+    "claude-sonnet-4":              (3.00,  15.00),
+    "claude-haiku-4":               (0.80,   4.00),
+    # Anthropic Claude 3.x
     "claude-3-5-sonnet":            (3.00,  15.00),
     "claude-3-5-haiku":             (0.80,   4.00),
     "claude-3-opus":                (15.00, 75.00),
     "claude-3-haiku":               (0.25,   1.25),
-    "claude-sonnet-4":              (3.00,  15.00),
-    "claude-haiku-4-5-20251001":    (1.00,   5.00),
+    # Groq / Meta Llama
     "llama3-8b-8192":               (0.05,   0.08),
     "llama3-70b-8192":              (0.59,   0.79),
     "llama-3.1-8b-instant":         (0.05,   0.08),
     "llama-3.3-70b-versatile":      (0.59,   0.79),
+    # Groq / Mixtral / Gemma
     "mixtral-8x7b-32768":           (0.24,   0.24),
     "gemma-7b-it":                  (0.07,   0.07),
 }
@@ -186,6 +192,7 @@ class CustomTracer(BaseCallbackHandler):
             or (serialized or {}).get("name")
             or (serialized or {}).get("id", ["unknown"])[-1]
         )
+        self._names[self._key(run_id)] = llm_name
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
@@ -215,6 +222,7 @@ class CustomTracer(BaseCallbackHandler):
             or (serialized or {}).get("name")
             or (serialized or {}).get("id", ["unknown"])[-1]
         )
+        self._names[self._key(run_id)] = llm_name
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
@@ -258,9 +266,8 @@ class CustomTracer(BaseCallbackHandler):
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._lookup_session(run_id),
-            "name": "llm",
+            "name": self._names.pop(self._key(run_id), "llm"),
             "run_type": "llm",
-            "inputs": None,
             "outputs": {"generations": [[g.text for g in gen] for gen in response.generations]},
             "start_time": _iso(start) if start else _iso(_now()),
             "end_time": _iso(_now()),
@@ -280,7 +287,7 @@ class CustomTracer(BaseCallbackHandler):
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._lookup_session(run_id),
-            "name": "llm",
+            "name": self._names.pop(self._key(run_id), "llm"),
             "run_type": "llm",
             "error": str(error),
             "start_time": _iso(start) if start else _iso(_now()),
@@ -385,11 +392,13 @@ class CustomTracer(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         start = self._record_start(run_id)
+        tool_name = serialized.get("name", "tool")
+        self._names[self._key(run_id)] = tool_name
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._get_session(run_id, parent_run_id),
-            "name": serialized.get("name", "tool"),
+            "name": tool_name,
             "run_type": "tool",
             "inputs": {"input": input_str},
             "start_time": _iso(start),
@@ -409,7 +418,7 @@ class CustomTracer(BaseCallbackHandler):
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._lookup_session(run_id),
-            "name": "tool",
+            "name": self._names.pop(self._key(run_id), "tool"),
             "run_type": "tool",
             "outputs": {"output": str(output)},
             "start_time": _iso(start) if start else _iso(_now()),
@@ -429,7 +438,7 @@ class CustomTracer(BaseCallbackHandler):
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._lookup_session(run_id),
-            "name": "tool",
+            "name": self._names.pop(self._key(run_id), "tool"),
             "run_type": "tool",
             "error": str(error),
             "start_time": _iso(start) if start else _iso(_now()),
@@ -451,11 +460,13 @@ class CustomTracer(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         start = self._record_start(run_id)
+        retriever_name = serialized.get("id", ["retriever"])[-1]
+        self._names[self._key(run_id)] = retriever_name
         self._fire({
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._get_session(run_id, parent_run_id),
-            "name": serialized.get("id", ["retriever"])[-1],
+            "name": retriever_name,
             "run_type": "retriever",
             "inputs": {"query": query},
             "start_time": _iso(start),
@@ -475,7 +486,7 @@ class CustomTracer(BaseCallbackHandler):
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._lookup_session(run_id),
-            "name": "retriever",
+            "name": self._names.pop(self._key(run_id), "retriever"),
             "run_type": "retriever",
             "outputs": {"documents": [str(d) for d in documents]},
             "start_time": _iso(start) if start else _iso(_now()),
@@ -495,7 +506,7 @@ class CustomTracer(BaseCallbackHandler):
             "id": str(run_id),
             "parent_id": str(parent_run_id) if parent_run_id else None,
             "session_id": self._lookup_session(run_id),
-            "name": "retriever",
+            "name": self._names.pop(self._key(run_id), "retriever"),
             "run_type": "retriever",
             "error": str(error),
             "start_time": _iso(start) if start else _iso(_now()),

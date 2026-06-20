@@ -15,6 +15,48 @@ import type { Serialized } from "@langchain/core/load/serializable";
 import type { LLMResult } from "@langchain/core/outputs";
 import type { BaseMessage } from "@langchain/core/messages";
 
+// Per-1M-token pricing [input_usd, output_usd]
+const PRICING: Record<string, [number, number]> = {
+  // OpenAI
+  "gpt-4o":                 [2.50,  10.00],
+  "gpt-4o-mini":            [0.15,   0.60],
+  "gpt-4-turbo":            [10.00, 30.00],
+  "gpt-4":                  [30.00, 60.00],
+  "gpt-3.5-turbo":          [0.50,   1.50],
+  // Anthropic Claude 4.x
+  "claude-opus-4":          [15.00, 75.00],
+  "claude-sonnet-4":        [3.00,  15.00],
+  "claude-haiku-4":         [0.80,   4.00],
+  // Anthropic Claude 3.x
+  "claude-3-5-sonnet":      [3.00,  15.00],
+  "claude-3-5-haiku":       [0.80,   4.00],
+  "claude-3-opus":          [15.00, 75.00],
+  "claude-3-haiku":         [0.25,   1.25],
+  // Groq / Meta Llama
+  "llama3-8b-8192":         [0.05,   0.08],
+  "llama3-70b-8192":        [0.59,   0.79],
+  "llama-3.1-8b-instant":   [0.05,   0.08],
+  "llama-3.3-70b-versatile":[0.59,   0.79],
+  // Groq / Mixtral / Gemma
+  "mixtral-8x7b-32768":     [0.24,   0.24],
+  "gemma-7b-it":            [0.07,   0.07],
+};
+
+function computeCost(
+  model: string | null | undefined,
+  promptTokens: number | null | undefined,
+  completionTokens: number | null | undefined,
+): number | null {
+  if (!model || promptTokens == null || completionTokens == null) return null;
+  const key = model.toLowerCase();
+  for (const [name, [inp, out]] of Object.entries(PRICING)) {
+    if (key.includes(name) || key.startsWith(name)) {
+      return (promptTokens * inp + completionTokens * out) / 1_000_000;
+    }
+  }
+  return null;
+}
+
 interface TracerOptions {
   /** Falls back to TRACER_ENDPOINT env var. Default: "http://localhost:8000" */
   endpoint?: string;
@@ -37,6 +79,7 @@ export class CustomTracer extends BaseCallbackHandler {
   private readonly routerDecisionKey: string;
   private readonly startTimes = new Map<string, number>();
   private readonly sessions = new Map<string, string>();
+  private readonly names = new Map<string, string>();
 
   constructor({ endpoint, project, apiKey, routerDecisionKey = "routerDecision" }: TracerOptions = {}) {
     super();
@@ -105,11 +148,13 @@ export class CustomTracer extends BaseCallbackHandler {
     tags?: string[],
   ): Promise<void> {
     const startTime = this.recordStart(runId);
+    const llmName = llm.id?.[llm.id.length - 1] ?? "llm";
+    this.names.set(runId, llmName);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.getSession(runId, parentRunId),
-      name: llm.id?.[llm.id.length - 1] ?? "llm",
+      name: llmName,
       run_type: "llm",
       inputs: { prompts },
       start_time: startTime,
@@ -126,11 +171,13 @@ export class CustomTracer extends BaseCallbackHandler {
     tags?: string[],
   ): Promise<void> {
     const startTime = this.recordStart(runId);
+    const llmName = llm.id?.[llm.id.length - 1] ?? "llm";
+    this.names.set(runId, llmName);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.getSession(runId, parentRunId),
-      name: llm.id?.[llm.id.length - 1] ?? "llm",
+      name: llmName,
       run_type: "llm",
       inputs: {
         messages: messages.map((batch) =>
@@ -146,11 +193,23 @@ export class CustomTracer extends BaseCallbackHandler {
     const startTime = this.popStart(runId);
     const llmOutput = output.llmOutput ?? {};
     const tokenUsage = (llmOutput.token_usage ?? llmOutput.tokenUsage ?? {}) as Record<string, number>;
+    const modelName: string | null = llmOutput.model_name ?? llmOutput.modelName ?? null;
+    const promptTokens: number | null = tokenUsage.prompt_tokens ?? tokenUsage.promptTokens ?? null;
+    const completionTokens: number | null = tokenUsage.completion_tokens ?? tokenUsage.completionTokens ?? null;
+    const totalTokens: number | null = tokenUsage.total_tokens ?? tokenUsage.totalTokens ?? null;
+    const costUsd = computeCost(modelName, promptTokens, completionTokens);
+    const extra: Record<string, unknown> = {
+      model_name: modelName,
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: totalTokens,
+    };
+    if (costUsd != null) extra.cost_usd = costUsd;
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.lookupSession(runId) ?? null,
-      name: "llm",
+      name: (() => { const n = this.names.get(runId); this.names.delete(runId); return n ?? "llm"; })(),
       run_type: "llm",
       outputs: {
         generations: output.generations.map((gen) =>
@@ -159,22 +218,19 @@ export class CustomTracer extends BaseCallbackHandler {
       },
       start_time: startTime,
       end_time: new Date().toISOString(),
-      extra: {
-        model_name: llmOutput.model_name ?? llmOutput.modelName ?? null,
-        prompt_tokens: tokenUsage.prompt_tokens ?? tokenUsage.promptTokens ?? null,
-        completion_tokens: tokenUsage.completion_tokens ?? tokenUsage.completionTokens ?? null,
-        total_tokens: tokenUsage.total_tokens ?? tokenUsage.totalTokens ?? null,
-      },
+      extra,
     });
   }
 
   async handleLLMError(err: Error, runId: string, parentRunId?: string): Promise<void> {
     const startTime = this.popStart(runId);
+    const name = this.names.get(runId) ?? "llm";
+    this.names.delete(runId);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.lookupSession(runId) ?? null,
-      name: "llm",
+      name,
       run_type: "llm",
       error: err.message,
       start_time: startTime,
@@ -197,11 +253,13 @@ export class CustomTracer extends BaseCallbackHandler {
     name?: string,
   ): Promise<void> {
     const startTime = this.recordStart(runId);
+    const chainName = name ?? chain.id?.[chain.id.length - 1] ?? "chain";
+    this.names.set(runId, chainName);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.getSession(runId, parentRunId),
-      name: name ?? chain.id?.[chain.id.length - 1] ?? "chain",
+      name: chainName,
       run_type: "chain",
       inputs,
       start_time: startTime,
@@ -215,6 +273,8 @@ export class CustomTracer extends BaseCallbackHandler {
     parentRunId?: string,
   ): Promise<void> {
     const startTime = this.popStart(runId);
+    const name = this.names.get(runId) ?? "chain";
+    this.names.delete(runId);
     const branchDecision =
       outputs && typeof outputs === "object"
         ? (outputs[this.routerDecisionKey] as string | undefined)
@@ -224,7 +284,7 @@ export class CustomTracer extends BaseCallbackHandler {
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.lookupSession(runId) ?? null,
-      name: "chain",
+      name,
       run_type: "chain",
       outputs,
       start_time: startTime,
@@ -238,11 +298,13 @@ export class CustomTracer extends BaseCallbackHandler {
 
   async handleChainError(err: Error, runId: string, parentRunId?: string): Promise<void> {
     const startTime = this.popStart(runId);
+    const name = this.names.get(runId) ?? "chain";
+    this.names.delete(runId);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.lookupSession(runId) ?? null,
-      name: "chain",
+      name,
       run_type: "chain",
       error: err.message,
       start_time: startTime,
@@ -264,11 +326,13 @@ export class CustomTracer extends BaseCallbackHandler {
     name?: string,
   ): Promise<void> {
     const startTime = this.recordStart(runId);
+    const toolName = name ?? (tool.name as string | undefined) ?? tool.id?.[tool.id.length - 1] ?? "tool";
+    this.names.set(runId, toolName);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.getSession(runId, parentRunId),
-      name: name ?? (tool.name as string | undefined) ?? tool.id?.[tool.id.length - 1] ?? "tool",
+      name: toolName,
       run_type: "tool",
       inputs: { input },
       start_time: startTime,
@@ -278,11 +342,13 @@ export class CustomTracer extends BaseCallbackHandler {
 
   async handleToolEnd(output: string, runId: string, parentRunId?: string): Promise<void> {
     const startTime = this.popStart(runId);
+    const name = this.names.get(runId) ?? "tool";
+    this.names.delete(runId);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.lookupSession(runId) ?? null,
-      name: "tool",
+      name,
       run_type: "tool",
       outputs: { output },
       start_time: startTime,
@@ -292,11 +358,13 @@ export class CustomTracer extends BaseCallbackHandler {
 
   async handleToolError(err: Error, runId: string, parentRunId?: string): Promise<void> {
     const startTime = this.popStart(runId);
+    const name = this.names.get(runId) ?? "tool";
+    this.names.delete(runId);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.lookupSession(runId) ?? null,
-      name: "tool",
+      name,
       run_type: "tool",
       error: err.message,
       start_time: startTime,
@@ -316,11 +384,13 @@ export class CustomTracer extends BaseCallbackHandler {
     tags?: string[],
   ): Promise<void> {
     const startTime = this.recordStart(runId);
+    const retrieverName = retriever.id?.[retriever.id.length - 1] ?? "retriever";
+    this.names.set(runId, retrieverName);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.getSession(runId, parentRunId),
-      name: retriever.id?.[retriever.id.length - 1] ?? "retriever",
+      name: retrieverName,
       run_type: "retriever",
       inputs: { query },
       start_time: startTime,
@@ -334,11 +404,13 @@ export class CustomTracer extends BaseCallbackHandler {
     parentRunId?: string,
   ): Promise<void> {
     const startTime = this.popStart(runId);
+    const name = this.names.get(runId) ?? "retriever";
+    this.names.delete(runId);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.lookupSession(runId) ?? null,
-      name: "retriever",
+      name,
       run_type: "retriever",
       outputs: { documents: documents.map(String) },
       start_time: startTime,
@@ -348,11 +420,13 @@ export class CustomTracer extends BaseCallbackHandler {
 
   async handleRetrieverError(err: Error, runId: string, parentRunId?: string): Promise<void> {
     const startTime = this.popStart(runId);
+    const name = this.names.get(runId) ?? "retriever";
+    this.names.delete(runId);
     this.fire({
       id: runId,
       parent_id: parentRunId ?? null,
       session_id: this.lookupSession(runId) ?? null,
-      name: "retriever",
+      name,
       run_type: "retriever",
       error: err.message,
       start_time: startTime,
