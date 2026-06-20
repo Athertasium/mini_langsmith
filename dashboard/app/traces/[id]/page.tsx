@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { getRun, getTraceTree } from "@/lib/db";
+import { notFound, redirect } from "next/navigation";
+import { getRun, getTraceTree, validateProjectOwner } from "@/lib/db";
+import { getServerUser } from "@/lib/session";
 import { TraceTree } from "@/components/TraceTree";
 
 export const dynamic = "force-dynamic";
@@ -26,10 +27,16 @@ export default async function TraceDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const user = await getServerUser();
+  if (!user) redirect("/signin");
+
   const { id } = await params;
   const [root, spans] = await Promise.all([getRun(id), getTraceTree(id)]);
 
   if (!root) notFound();
+
+  const owns = await validateProjectOwner(root.project, user.id);
+  if (!owns) notFound();
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">

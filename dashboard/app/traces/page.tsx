@@ -1,4 +1,5 @@
-import { getRootSpans } from "@/lib/db";
+import { getRootSpans, validateProjectOwner } from "@/lib/db";
+import { getServerUser } from "@/lib/session";
 import { TraceTable } from "@/components/TraceTable";
 import { LatencyChart } from "@/components/LatencyChart";
 import { FilterBar } from "@/components/FilterBar";
@@ -13,9 +14,15 @@ export default async function TracesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  const user = await getServerUser();
+  if (!user) redirect("/signin");
+
   const sp = await searchParams;
   const project    = sp.project    ?? undefined;
   if (!project) redirect("/projects");
+
+  const owns = await validateProjectOwner(project, user.id);
+  if (!owns) redirect("/projects");
   const run_type   = sp.run_type   ?? undefined;
   const tag        = sp.tag        ?? undefined;
   const error_only = sp.error_only === "1";

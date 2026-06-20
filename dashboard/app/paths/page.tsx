@@ -1,5 +1,7 @@
 import { SankeyDiagram } from "@/components/SankeyDiagram";
 import { ProjectSubNav } from "@/components/ProjectSubNav";
+import { validateProjectOwner } from "@/lib/db";
+import { getServerUser } from "@/lib/session";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
@@ -16,8 +18,14 @@ export default async function PathsPage({
 }: {
   searchParams: Promise<{ project?: string; from?: string; to?: string }>;
 }) {
+  const user = await getServerUser();
+  if (!user) redirect("/signin");
+
   const { project = "", from, to } = await searchParams;
   if (!project) redirect("/projects");
+
+  const owns = await validateProjectOwner(project, user.id);
+  if (!owns) redirect("/projects");
   const resolvedFrom = from ?? sevenDaysAgo();
 
   return (

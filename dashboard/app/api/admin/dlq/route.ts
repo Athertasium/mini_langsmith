@@ -1,11 +1,15 @@
 import { type NextRequest } from "next/server";
 import { getRedis, type DlqEntry } from "@/lib/redis";
+import { getRequestUser } from "@/lib/session";
 
 const DEADLETTER_KEY = "runs:deadletter";
 const PENDING_KEY = "runs:pending";
 const PAGE_SIZE = 20;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const redis = getRedis();
     const raw = await redis.lrange(DEADLETTER_KEY, 0, PAGE_SIZE - 1);
@@ -31,6 +35,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const user = await getRequestUser(request);
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
     const { index } = (await request.json()) as { index: number };
     const redis = getRedis();
