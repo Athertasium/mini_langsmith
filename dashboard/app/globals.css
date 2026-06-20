@@ -1,18 +1,83 @@
 @import "tailwindcss";
 
+/* ── Obsidian Trace Design System ────────────────────────────────────── */
 :root {
-  --background: #0f1117;
-  --surface: #1a1d27;
-  --surface-2: #22263a;
-  --border: #2e3250;
-  --text-primary: #e8eaf6;
-  --text-secondary: #8b8fa8;
-  --accent: #6366f1;
+  --sidebar-w: 228px;
+  /* Surface hierarchy (tonal layering — no heavy shadows) */
+  --background:   #10131a;   /* main canvas */
+  --bg-deep:      #0b0e14;   /* deepest — inputs, code blocks */
+  --surface:      #1d2026;   /* cards, panels */
+  --surface-low:  #191c22;   /* slightly elevated */
+  --surface-high: #272a31;   /* table headers, active rows */
+  --surface-top:  #32353c;   /* tooltips, dropdowns */
+
+  /* Backwards compat alias */
+  --surface-2: var(--surface-high);
+
+  /* Borders */
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-strong: #464554;
+
+  /* Text */
+  --text-primary:   #e1e2eb;
+  --text-secondary: #c7c4d7;
+  --text-muted:     #908fa0;
+
+  /* Brand — Indigo */
+  --accent:       #6366f1;
   --accent-hover: #818cf8;
+  --accent-dim:   rgba(99, 102, 241, 0.12);
+
+  /* Status */
+  --success:      #10b981;
+  --success-dim:  rgba(16, 185, 129, 0.12);
+  --error-color:  #f43f5e;
+  --error-dim:    rgba(244, 63, 94, 0.12);
+
+  /* Run-type badge tokens */
+  --llm-color:        #818cf8;
+  --llm-bg:           rgba(99, 102, 241, 0.15);
+  --chain-color:      #c084fc;
+  --chain-bg:         rgba(192, 132, 252, 0.15);
+  --tool-color:       #fbbf24;
+  --tool-bg:          rgba(251, 191, 36, 0.12);
+  --retriever-color:  #4edea3;
+  --retriever-bg:     rgba(78, 222, 163, 0.12);
 }
 
 body {
   background: var(--background);
   color: var(--text-primary);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Smooth scrollbar */
+* { scrollbar-width: thin; scrollbar-color: var(--surface-high) transparent; }
+
+/* Project card hover */
+.project-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: border-color 150ms, background 150ms, box-shadow 150ms;
+}
+.project-card:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: var(--surface-low);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.1) inset;
+}
+.project-card:hover .project-card-cta {
+  opacity: 1;
+}
+
+/* Sidebar nav item hover (CSS handles non-active; active uses inline style) */
+.nav-item {
+  transition: background 120ms, color 120ms;
+}
+.nav-item:hover {
+  background: var(--surface) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Table row hover */
+.trace-row:hover {
+  background: var(--surface-high) !important;
 }

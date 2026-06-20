@@ -13,10 +13,6 @@ const TIME_RANGES = [
   { label: "All", value: "" },
 ] as const;
 
-function hoursAgo(h: number): string {
-  return new Date(Date.now() - h * 3600_000).toISOString();
-}
-
 function rangeToFrom(value: string): string | null {
   if (!value) return null;
   const n = parseInt(value);
@@ -25,10 +21,40 @@ function rangeToFrom(value: string): string | null {
   return new Date(Date.now() - ms).toISOString();
 }
 
-function chipStyle(active: boolean): React.CSSProperties {
-  return active
-    ? { background: "var(--accent)", color: "#fff" }
-    : { background: "var(--surface-2)", color: "var(--text-secondary)" };
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      className="rounded px-2.5 py-1 text-xs font-medium transition-all duration-150 cursor-pointer"
+      style={
+        active
+          ? {
+              background: "var(--accent-dim)",
+              color: "var(--accent-hover)",
+              border: "1px solid rgba(99, 102, 241, 0.35)",
+            }
+          : {
+              background: "transparent",
+              color: "var(--text-muted)",
+              border: "1px solid transparent",
+            }
+      }
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Divider() {
+  return <span style={{ width: 1, height: 16, background: "var(--border-strong)", display: "inline-block" }} />;
 }
 
 export function FilterBar() {
@@ -74,54 +100,46 @@ export function FilterBar() {
   })();
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      {/* run_type */}
-      <div className="flex gap-1">
-        <button
-          className="rounded px-2.5 py-1 text-xs font-medium"
-          style={chipStyle(currentRunType === "")}
-          onClick={() => update("run_type", null)}
-        >
-          All types
-        </button>
+    <div className="flex flex-wrap items-center gap-2">
+      {/* Run type */}
+      <span className="text-xs" style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        type
+      </span>
+      <div className="flex gap-0.5">
+        <Chip active={currentRunType === ""} onClick={() => update("run_type", null)}>
+          all
+        </Chip>
         {RUN_TYPES.map((t) => (
-          <button
+          <Chip
             key={t}
-            className="rounded px-2.5 py-1 text-xs font-medium"
-            style={chipStyle(currentRunType === t)}
+            active={currentRunType === t}
             onClick={() => update("run_type", currentRunType === t ? null : t)}
           >
             {t}
-          </button>
+          </Chip>
         ))}
       </div>
 
-      <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+      <Divider />
 
-      {/* time range */}
-      <div className="flex gap-1">
+      {/* Time range */}
+      <span className="text-xs" style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+        range
+      </span>
+      <div className="flex gap-0.5">
         {TIME_RANGES.map(({ label, value }) => (
-          <button
-            key={label}
-            className="rounded px-2.5 py-1 text-xs font-medium"
-            style={chipStyle(currentRange === value)}
-            onClick={() => setTimeRange(value)}
-          >
+          <Chip key={label} active={currentRange === value} onClick={() => setTimeRange(value)}>
             {label}
-          </button>
+          </Chip>
         ))}
       </div>
 
-      <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+      <Divider />
 
-      {/* error only */}
-      <button
-        className="rounded px-2.5 py-1 text-xs font-medium"
-        style={chipStyle(errorOnly)}
-        onClick={() => update("error_only", errorOnly ? null : "1")}
-      >
-        Errors only
-      </button>
+      {/* Error only */}
+      <Chip active={errorOnly} onClick={() => update("error_only", errorOnly ? null : "1")}>
+        errors only
+      </Chip>
     </div>
   );
 }

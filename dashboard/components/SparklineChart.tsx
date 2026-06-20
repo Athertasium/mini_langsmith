@@ -30,13 +30,15 @@ export function SparklineChart({ project, name }: Props) {
   }, [project, name]);
 
   if (data === null) {
-    return <span className="text-xs" style={{ color: "var(--text-secondary)", opacity: 0.4 }}>…</span>;
+    return (
+      <span style={{ color: "var(--text-muted)", fontSize: 11, opacity: 0.4 }}>…</span>
+    );
   }
 
   if (data.length < MIN_RUNS) {
     return (
-      <span className="text-xs" style={{ color: "var(--text-secondary)", opacity: 0.4 }}>
-        not enough history
+      <span style={{ color: "var(--text-muted)", fontSize: 10, opacity: 0.4 }}>
+        –
       </span>
     );
   }
@@ -46,15 +48,15 @@ export function SparklineChart({ project, name }: Props) {
   return (
     <span
       title={`latency last ${data.length} runs (mean ${Math.round(mean)} ms)`}
-      style={{ display: "inline-flex", alignItems: "center", width: 100, height: 24 }}
+      style={{ display: "inline-flex", alignItems: "center", width: 80, height: 20 }}
     >
-      <ResponsiveContainer width="100%" height={24}>
+      <ResponsiveContainer width="100%" height={20}>
         <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-          <ReferenceLine y={mean} stroke="#4f5ba6" strokeDasharray="2 2" strokeWidth={1} />
+          <ReferenceLine y={mean} stroke="rgba(99,102,241,0.3)" strokeDasharray="2 2" strokeWidth={1} />
           <Line
             type="monotone"
             dataKey="v"
-            stroke="#818cf8"
+            stroke="var(--accent)"
             dot={false}
             strokeWidth={1.5}
             isAnimationActive={false}

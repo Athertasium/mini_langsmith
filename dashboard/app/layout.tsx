@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
+import { Inter, JetBrains_Mono } from "next/font/google";
+import { Sidebar } from "@/components/Sidebar";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
   subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
@@ -26,16 +29,23 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col" style={{ background: "var(--background)", color: "var(--text-primary)" }}>
-        <nav style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }} className="px-6 py-3 flex items-center gap-6">
-          <Link href="/projects" className="font-bold text-sm tracking-wide" style={{ color: "var(--accent)" }}>⬡ Tracer</Link>
-          <Link href="/projects" className="text-sm transition-colors" style={{ color: "var(--text-secondary)" }}>
-            Projects
-          </Link>
-        </nav>
-        <main className="flex-1">{children}</main>
+      <body
+        className="flex h-full"
+        style={{
+          background: "var(--background)",
+          color: "var(--text-primary)",
+          fontFamily: "var(--font-inter), system-ui, sans-serif",
+        }}
+      >
+        <Sidebar />
+        <main
+          className="flex-1 min-w-0 overflow-y-auto"
+          style={{ minHeight: "100svh" }}
+        >
+          {children}
+        </main>
       </body>
     </html>
   );

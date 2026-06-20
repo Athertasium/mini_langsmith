@@ -8,16 +8,16 @@ import { SparklineChart } from "@/components/SparklineChart";
 import type { Run } from "@/lib/db";
 
 const RUN_TYPE_STYLES: Record<string, { bg: string; color: string }> = {
-  llm:       { bg: "#1e2a4a", color: "#818cf8" },
-  chain:     { bg: "#2a1e4a", color: "#c084fc" },
-  tool:      { bg: "#2a2a1e", color: "#facc15" },
-  retriever: { bg: "#1e2a2a", color: "#34d399" },
+  llm:       { bg: "var(--llm-bg)",       color: "var(--llm-color)" },
+  chain:     { bg: "var(--chain-bg)",     color: "var(--chain-color)" },
+  tool:      { bg: "var(--tool-bg)",      color: "var(--tool-color)" },
+  retriever: { bg: "var(--retriever-bg)", color: "var(--retriever-color)" },
 };
 
 function JsonField({ value }: { value: unknown }) {
   if (value === null || value === undefined) return null;
   return (
-    <div className="rounded overflow-auto text-xs" style={{ background: "var(--background)", maxHeight: 400 }}>
+    <div className="rounded overflow-auto text-xs" style={{ background: "var(--bg-deep)", maxHeight: 400 }}>
       <JsonView data={value} shouldExpandNode={allExpanded} style={darkStyles} />
     </div>
   );
@@ -37,7 +37,7 @@ function LlmOutputField({ value }: { value: unknown }) {
     return (
       <div
         className="prose prose-invert prose-sm max-w-none rounded p-3 text-xs overflow-x-auto"
-        style={{ background: "var(--background)", color: "#86efac" }}
+        style={{ background: "var(--bg-deep)", color: "var(--retriever-color)" }}
       >
         <ReactMarkdown>{text}</ReactMarkdown>
       </div>
@@ -51,10 +51,10 @@ function ErrorBlock({ error }: { error: string }) {
     <pre
       className="overflow-x-auto rounded p-3 text-xs whitespace-pre-wrap"
       style={{
-        background: "#2a0a0a",
+        background: "var(--error-dim)",
         color: "#fca5a5",
-        fontFamily: "var(--font-geist-mono)",
-        border: "1px solid #7f1d1d",
+        fontFamily: "var(--font-mono)",
+        border: "1px solid rgba(244, 63, 94, 0.3)",
       }}
     >
       {error}
@@ -62,14 +62,50 @@ function ErrorBlock({ error }: { error: string }) {
   );
 }
 
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-hidden="true"
+      style={{
+        transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+        transition: "transform 150ms ease",
+        color: "var(--text-muted)",
+        flexShrink: 0,
+      }}
+    >
+      <path
+        d="M5 3L9 7L5 11"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FieldLabel({ label }: { label: string }) {
+  return (
+    <p
+      className="mb-1.5 text-xs font-medium uppercase tracking-wider"
+      style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.08em" }}
+    >
+      {label}
+    </p>
+  );
+}
+
 function SpanNode({ span, depth, project }: { span: RunNode; depth: number; project: string }) {
   const [expanded, setExpanded] = useState(false);
   const hasChildren = span.children.length > 0;
   const hasError = span.error != null;
-  const typeStyle = RUN_TYPE_STYLES[span.run_type] ?? { bg: "#1e2030", color: "#8b8fa8" };
+  const typeStyle = RUN_TYPE_STYLES[span.run_type] ?? { bg: "var(--surface-high)", color: "var(--text-muted)" };
+  const hasExpandable = hasChildren || span.inputs || span.outputs || hasError;
 
-  const borderColor = hasError ? "#dc2626" : "var(--border)";
-  const bgColor = hasError ? "#1f0a0a" : "var(--surface)";
   const isLlm = span.run_type === "llm";
 
   return (
@@ -77,84 +113,97 @@ function SpanNode({ span, depth, project }: { span: RunNode; depth: number; proj
       className="rounded-lg mb-2"
       style={{
         marginLeft: depth * 20,
-        border: `1px solid ${borderColor}`,
-        background: bgColor,
+        border: hasError ? "1px solid rgba(244, 63, 94, 0.35)" : "1px solid var(--border)",
+        background: hasError ? "rgba(244, 63, 94, 0.04)" : "var(--surface)",
       }}
     >
       <div
-        className="flex cursor-pointer items-center gap-3 px-4 py-3"
-        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-2.5 px-4 py-2.5"
+        style={{ cursor: hasExpandable ? "pointer" : "default" }}
+        onClick={() => hasExpandable && setExpanded((v) => !v)}
       >
+        {/* Expand chevron */}
+        <span style={{ opacity: hasExpandable ? 1 : 0 }}>
+          <ChevronIcon expanded={expanded} />
+        </span>
+
+        {/* Run type badge */}
         <span
           className="rounded px-2 py-0.5 text-xs font-medium shrink-0"
-          style={{ background: typeStyle.bg, color: typeStyle.color }}
+          style={{
+            background: typeStyle.bg,
+            color: typeStyle.color,
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+          }}
         >
           {span.run_type}
         </span>
-        <span className="flex-1 font-medium text-sm" style={{ color: "var(--text-primary)" }}>
+
+        {/* Span name */}
+        <span className="flex-1 font-medium text-sm truncate" style={{ color: "var(--text-primary)" }}>
           {span.name}
         </span>
+
+        {/* Sparkline */}
         <SparklineChart project={project} name={span.name} />
+
+        {/* Latency */}
         {span.latency_ms != null && (
           <span
-            className="text-xs shrink-0"
-            style={{ color: "#818cf8", fontFamily: "var(--font-geist-mono)" }}
+            className="text-xs shrink-0 tabular-nums"
+            style={{ color: "var(--accent-hover)", fontFamily: "var(--font-mono)" }}
           >
             {span.latency_ms} ms
           </span>
         )}
+
+        {/* Error badge */}
         {hasError && (
-          <span className="rounded px-2 py-0.5 text-xs font-bold shrink-0" style={{ background: "#3f1515", color: "#f87171" }}>
-            ERROR
-          </span>
-        )}
-        {(hasChildren || span.inputs || span.outputs || hasError) && (
-          <span className="text-xs shrink-0" style={{ color: "var(--text-secondary)" }}>
-            {expanded ? "▲" : "▼"}
+          <span
+            className="rounded px-1.5 py-0.5 text-xs font-semibold shrink-0"
+            style={{ background: "var(--error-dim)", color: "var(--error-color)" }}
+          >
+            ERR
           </span>
         )}
       </div>
 
+      {/* Error section */}
       {expanded && hasError && (
-        <div className="px-4 py-3" style={{ borderTop: "1px solid #7f1d1d" }}>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "#f87171" }}>
-            Error
-          </p>
+        <div className="px-4 pb-4" style={{ borderTop: "1px solid rgba(244, 63, 94, 0.2)" }}>
+          <FieldLabel label="Error" />
           <ErrorBlock error={span.error!} />
         </div>
       )}
 
+      {/* Content section */}
       {expanded && !hasError && (span.inputs || span.outputs || span.extra) && (
-        <div className="px-4 py-3 text-sm space-y-4" style={{ borderTop: "1px solid var(--border)" }}>
+        <div className="px-4 pb-4 space-y-4" style={{ borderTop: "1px solid var(--border)" }}>
           {span.inputs && (
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
-                Inputs
-              </p>
+            <div className="pt-4">
+              <FieldLabel label="Inputs" />
               <JsonField value={span.inputs} />
             </div>
           )}
           {span.outputs && (
             <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
-                Outputs
-              </p>
+              <FieldLabel label="Outputs" />
               {isLlm ? <LlmOutputField value={span.outputs} /> : <JsonField value={span.outputs} />}
             </div>
           )}
           {span.extra && (
             <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
-                Extra
-              </p>
+              <FieldLabel label="Extra" />
               <JsonField value={span.extra} />
             </div>
           )}
         </div>
       )}
 
+      {/* Children */}
       {expanded && hasChildren && (
-        <div className="pb-2 pr-2" style={{ borderTop: "1px solid var(--border)" }}>
+        <div className="p-2" style={{ borderTop: "1px solid var(--border)" }}>
           {span.children.map((child) => (
             <SpanNode key={child.id} span={child} depth={0} project={project} />
           ))}

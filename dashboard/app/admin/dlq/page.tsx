@@ -68,7 +68,7 @@ export default function DlqPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
           Dead Letter Queue
         </h1>
         <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -87,7 +87,7 @@ export default function DlqPage() {
           className="rounded-lg px-5 py-4"
           style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
         >
-          <p className="text-sm font-medium" style={{ color: "var(--color-error, #ef4444)" }}>
+          <p className="text-sm font-medium" style={{ color: "var(--error-color)" }}>
             Failed to connect to Redis
           </p>
           <p className="mt-1 font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -159,7 +159,7 @@ export default function DlqPage() {
                       {entry.error && (
                         <p
                           className="mt-1 text-xs font-mono truncate"
-                          style={{ color: "var(--color-error, #ef4444)" }}
+                          style={{ color: "var(--error-color)" }}
                           title={entry.error}
                         >
                           {entry.error}
@@ -184,7 +184,7 @@ export default function DlqPage() {
                         disabled={replaying === i || replayResults[i] === "ok"}
                         className="rounded px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50"
                         style={{
-                          background: replayResults[i] === "ok" ? "var(--surface-2)" : "var(--color-accent, #6366f1)",
+                          background: replayResults[i] === "ok" ? "var(--surface-high)" : "var(--accent)",
                           color: replayResults[i] === "ok" ? "var(--text-secondary)" : "#fff",
                           border: "1px solid transparent",
                         }}

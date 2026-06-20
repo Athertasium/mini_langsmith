@@ -24,16 +24,19 @@ export default async function PathsPage({
     <div className="mx-auto max-w-7xl px-4 py-8">
       <ProjectSubNav project={project} active="paths" />
       <div className="mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-          Routing Paths — {project}
+        <h1
+          className="text-xl font-semibold"
+          style={{ color: "var(--text-primary)", letterSpacing: "-0.01em" }}
+        >
+          Routing Paths
         </h1>
         <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-          Which node sequences actually fire across traces — and how often.
+          Node sequences that fire across traces — and how often.
         </p>
       </div>
 
       {/* Date range quick-selects */}
-      <div className="mb-6 flex gap-2 text-sm">
+      <div className="mb-6 flex gap-1">
         {[
           { label: "Last 7 days", days: 7 },
           { label: "Last 30 days", days: 30 },
@@ -48,11 +51,18 @@ export default async function PathsPage({
             <Link
               key={label}
               href={href}
-              className="rounded px-3 py-1.5 transition-colors"
+              className="rounded px-3 py-1.5 text-xs font-medium transition-all duration-150"
               style={
                 active
-                  ? { background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border)" }
-                  : { color: "var(--text-secondary)" }
+                  ? {
+                      background: "var(--accent-dim)",
+                      color: "var(--accent-hover)",
+                      border: "1px solid rgba(99, 102, 241, 0.35)",
+                    }
+                  : {
+                      color: "var(--text-muted)",
+                      border: "1px solid transparent",
+                    }
               }
             >
               {label}

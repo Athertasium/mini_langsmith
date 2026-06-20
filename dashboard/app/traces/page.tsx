@@ -25,15 +25,32 @@ export default async function TracesPage({
   const runs = await getRootSpans({ project, run_type, tag, error_only, from, to });
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
+    <div className="mx-auto max-w-7xl px-6 py-8">
       <ProjectSubNav project={project} active="traces" />
-      <h1 className="mb-4 text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-        Traces — {project}
-      </h1>
+
+      {/* Page title + count */}
+      <div className="mb-5 flex items-baseline gap-3">
+        <h1
+          className="text-xl font-semibold"
+          style={{ color: "var(--text-primary)", letterSpacing: "-0.01em" }}
+        >
+          Traces
+        </h1>
+        <span
+          className="rounded px-2 py-0.5 text-xs font-medium tabular-nums"
+          style={{
+            background: "var(--surface-high)",
+            color: "var(--text-muted)",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          {runs.length}
+        </span>
+      </div>
 
       {/* Filter bar */}
       <div
-        className="mb-4 rounded-lg px-4 py-3"
+        className="mb-5 rounded-lg px-4 py-3"
         style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
       >
         <Suspense fallback={null}>
@@ -42,14 +59,9 @@ export default async function TracesPage({
       </div>
 
       {/* Latency trend */}
-      <div className="mb-6">
+      <div className="mb-5">
         <LatencyChart project={project} />
       </div>
-
-      {/* Result count */}
-      <p className="mb-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-        {runs.length} trace{runs.length !== 1 ? "s" : ""}
-      </p>
 
       <TraceTable data={runs} />
     </div>
