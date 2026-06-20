@@ -35,7 +35,7 @@ function IcoActivity() {
   );
 }
 
-function IcoSankey() {
+function IcoPaths() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden>
       <path d="M2 4.5h3M2 10.5h3M5 4.5C5 4.5 5 7.5 8 7.5s3 3 3 3M5 10.5V7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -229,7 +229,7 @@ function SidebarInner() {
             />
             <NavItem
               href={proj("/paths")}
-              icon={<IcoSankey />}
+              icon={<IcoPaths />}
               label="Paths"
               active={isPaths}
             />

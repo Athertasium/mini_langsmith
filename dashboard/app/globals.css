@@ -68,6 +68,35 @@ body {
   opacity: 1;
 }
 
+/* ReactFlow dark-theme overrides */
+.react-flow__controls {
+  background: #1e2235;
+  border: 1px solid #2a2f4a;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.react-flow__controls-button {
+  background: #1e2235;
+  border-bottom: 1px solid #2a2f4a;
+  color: #e8eaf6;
+  fill: #e8eaf6;
+}
+.react-flow__controls-button:hover {
+  background: #2a2f4a;
+}
+.react-flow__controls-button svg {
+  fill: #e8eaf6;
+  max-width: 12px;
+  max-height: 12px;
+}
+.react-flow__attribution {
+  background: transparent;
+  color: #4b5280;
+}
+.react-flow__attribution a {
+  color: #4b5280;
+}
+
 /* Sidebar nav item hover (CSS handles non-active; active uses inline style) */
 .nav-item {
   transition: background 120ms, color 120ms;

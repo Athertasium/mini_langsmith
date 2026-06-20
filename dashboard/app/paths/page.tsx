@@ -1,4 +1,4 @@
-import { SankeyDiagram } from "@/components/SankeyDiagram";
+import { FlowGraph } from "@/components/FlowGraph";
 import { ProjectSubNav } from "@/components/ProjectSubNav";
 import { validateProjectOwner } from "@/lib/db";
 import { getServerUser } from "@/lib/session";
@@ -79,17 +79,17 @@ export default async function PathsPage({
         })}
       </div>
 
-      {/* Sankey diagram — client component */}
+      {/* Flow graph — client component */}
       <div
         className="rounded-lg p-4"
         style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
       >
-        <SankeyDiagram project={project} from={resolvedFrom} to={to} />
+        <FlowGraph project={project} from={resolvedFrom} to={to} />
       </div>
 
       <p className="mt-4 text-xs" style={{ color: "var(--text-secondary)" }}>
-        Stream width ∝ trace frequency. Hover a link to see count and jump to matching traces.
-        Node labels show <code>name</code> (top) and <code>:branch_decision</code> (bottom) when present.
+        Node size reflects frequency. Hover a node or edge to see session count and jump to matching traces.
+        Dashed yellow edges indicate cycles. Drag to rearrange; scroll to zoom.
       </p>
     </div>
   );
