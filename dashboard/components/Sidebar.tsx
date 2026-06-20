@@ -132,7 +132,7 @@ function SidebarInner() {
   const project = searchParams.get("project");
   const { data: session } = useSession();
 
-  if (pathname === "/signin") return null;
+  if (pathname === "/signin" || pathname === "/") return null;
 
   const proj = (base: string) =>
     project ? `${base}?project=${encodeURIComponent(project)}` : "/projects";
