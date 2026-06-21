@@ -1,11 +1,16 @@
 FROM python:3.12-slim
 
+RUN pip install --no-cache-dir uv
+
 WORKDIR /app
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e .
+COPY requirements.txt .
 
-COPY . .
+RUN uv pip install --system --no-cache -r requirements.txt
+
+COPY collector/ collector/
+COPY db/ db/
+COPY sdk/ sdk/
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
